@@ -1,5 +1,6 @@
 use crate::cpu::Cpu;
 
+#[derive(Debug)]
 pub enum AddressingMode {
     ZeroPage,
     IndexedZeroPageX,

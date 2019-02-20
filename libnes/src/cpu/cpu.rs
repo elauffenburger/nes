@@ -2,7 +2,7 @@ use byteorder::{ByteOrder, LittleEndian};
 
 use super::Registers;
 use crate::cpu::instr::addressing::AddressingMode;
-use crate::cpu::instr::{Instruction, CpuInstruction};
+use crate::cpu::instr::{CpuInstruction, Instruction};
 use crate::mem::{Address, CpuMemoryMap, MemoryMap};
 
 const NMI_INTERRUPT_ADDR_START: u16 = 0xfffa;
@@ -10,8 +10,8 @@ const RESET_INTERRUPT_ADDR_START: u16 = 0xfffc;
 const IRQ_INTERRUPT_ADDR_START: u16 = 0xfffe;
 
 pub struct Cpu {
-    memory: Box<MemoryMap>,
-    registers: Registers,
+    pub memory: Box<MemoryMap>,
+    pub registers: Registers,
 }
 
 impl Cpu {
@@ -22,19 +22,19 @@ impl Cpu {
         }
     }
 
-    pub fn run(&mut self) {
+    pub fn run(mut self) {
         self.startup();
 
         loop {
             let instruction = self.next_instr();
-            break;
+            instruction.run();
         }
     }
 
     fn next_instr(&mut self) -> CpuInstruction {
         let opcode = self.next_u8();
 
-        opcode.into()
+        CpuInstruction::from(opcode, self)
     }
 
     fn startup(&mut self) {
@@ -88,45 +88,17 @@ impl Cpu {
         LittleEndian::read_u16(&[lower, upper])
     }
 
-    pub fn get_addr(&mut self, addr_mode: &AddressingMode) -> u16 {
-        match addr_mode {
-            Implied => panic!("Implicit instructions do not have a resolved address"),
-            Accumulator => panic!("Accumulator instructions always operate on the accumulator"),
-            Immediate => self.next_u8() as u16,
-            ZeroPage => self.next_u8() as u16,
-            IndexedZeroPageX => {
-                let base_addr: Address = self.next_u8().into();
+    pub fn perform_instr<F>(&mut self, instr: F)
+    where
+        F: Fn(&mut Cpu),
+    {
+        let acc_pre = self.registers.acc;
 
-                (&base_addr + self.registers.x).into()
-            }
-            IndexedZeroPageY => {
-                let base_addr: Address = self.next_u8().into();
+        instr(self);
 
-                (&base_addr + self.registers.y).into()
-            }
-            Relative => self.next_u8() as u16,
-            Absolute => self.next_u16(),
-            IndexedAbsoluteX => {
-                let base_addr: Address = self.next_u16().into();
+        let acc_post = self.registers.acc;
 
-                (&base_addr + self.registers.x).into()
-            }
-            IndexedAbsoluteY => {
-                let base_addr: Address = self.next_u16().into();
-
-                (&base_addr + self.registers.y).into()
-            }
-            Indirect => {
-                let addr = self.next_u16();
-
-                self.read_u16_at(&addr.into())
-            }
-            IndexedIndirect => {
-                let addr: Address = self.next_u16().into();
-
-                self.read_u16_at(&(&addr + self.registers.x))
-            }
-        }
+        // todo: set status flags based on pre and post states
     }
 }
 
@@ -141,13 +113,17 @@ mod test {
 
         // write interrupt routine addr
         cpu.write_bytes_to(&Address::from(RESET_INTERRUPT_ADDR_START), &[0x2d, 0xd2]);
-        cpu.write_bytes_to(&Address::from(0xd22d), &to_bytes("a9 01 8d 00 02 a9 05 8d 01 02 a9 08 8d 02 02"));
+        cpu.write_bytes_to(
+            &Address::from(0xd22d),
+            &to_bytes("a9 01 8d 00 02 a9 05 8d 01 02 a9 08 8d 02 02"),
+        );
 
         cpu.run();
     }
 
     fn to_bytes<'a>(byte_str: &'a str) -> Vec<u8> {
-        byte_str.split(" ")
+        byte_str
+            .split(" ")
             .map(|b| u8::from_str_radix(b.clone(), 16).unwrap())
             .collect::<Vec<u8>>()
     }
