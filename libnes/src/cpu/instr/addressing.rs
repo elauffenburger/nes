@@ -1,13 +1,11 @@
-use crate::cpu::Cpu;
-
 #[derive(Debug)]
 pub enum AddressingMode {
     ZeroPage,
-    IndexedZeroPageX,
-    IndexedZeroPageY,
+    ZeroPageX,
+    ZeroPageY,
     Absolute,
-    IndexedAbsoluteX,
-    IndexedAbsoluteY,
+    AbsoluteX,
+    AbsoluteY,
     Indirect,
     Implied,
     Acc,
