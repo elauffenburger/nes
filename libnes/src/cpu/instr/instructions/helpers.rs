@@ -9,23 +9,9 @@ pub enum GetOperandResult {
     Address(Address),
 }
 
-impl From<u8> for GetOperandResult {
-    fn from(value: u8) -> Self {
-        GetOperandResult::Value(value as i8)
-    }
-}
-
-impl From<u16> for GetOperandResult {
-    fn from(addr: u16) -> Self {
-        GetOperandResult::Address(addr.into())
-    }
-}
-
 impl From<Address> for GetOperandResult {
     fn from(addr: Address) -> Self {
-        let raw_addr: u16 = addr.into();
-
-        raw_addr.into()
+        GetOperandResult::Address(addr)
     }
 }
 
@@ -49,8 +35,8 @@ pub fn get_operand(cpu: &mut Cpu, addr_mode: &AddressingMode) -> GetOperandResul
     match addr_mode {
         AddressingMode::Implied => panic!("Implicit instructions do not have a resolved address"),
         AddressingMode::Acc => panic!("Accumulator instructions always operate on the accumulator"),
-        AddressingMode::Immediate => cpu.next_u8().into(),
-        AddressingMode::ZeroPage => cpu.next_u8().into(),
+        AddressingMode::Immediate => GetOperandResult::Value(cpu.next_u8() as i8),
+        AddressingMode::ZeroPage => GetOperandResult::Address(cpu.next_u8().into()),
         AddressingMode::ZeroPageX => {
             let base_addr: Address = cpu.next_u8().into();
 
@@ -61,8 +47,8 @@ pub fn get_operand(cpu: &mut Cpu, addr_mode: &AddressingMode) -> GetOperandResul
 
             (&base_addr + cpu.registers.y).into()
         }
-        AddressingMode::Relative => cpu.next_u8().into(),
-        AddressingMode::Absolute => cpu.next_u16().into(),
+        AddressingMode::Relative => GetOperandResult::Value(cpu.next_u8() as i8),
+        AddressingMode::Absolute => GetOperandResult::Address(cpu.next_u16().into()),
         AddressingMode::AbsoluteX => {
             let base_addr: Address = cpu.next_u16().into();
 
@@ -76,7 +62,7 @@ pub fn get_operand(cpu: &mut Cpu, addr_mode: &AddressingMode) -> GetOperandResul
         AddressingMode::Indirect => {
             let addr = cpu.next_u16();
 
-            cpu.read_u16_at(&addr.into()).into()
+            GetOperandResult::Address(cpu.read_u16_at(&addr.into()).into())
         }
         AddressingMode::IndexedIndirect => {
             let operand = cpu.next_u8();
@@ -94,7 +80,7 @@ pub fn get_operand(cpu: &mut Cpu, addr_mode: &AddressingMode) -> GetOperandResul
 
             // A <- *($2074)
             // A <- $55
-            cpu.read_u8_at(&addr).into()
+            GetOperandResult::Value(cpu.read_u8_at(&addr) as i8)
         }
         AddressingMode::IndirectIndexed => {
             // lda ($86), Y
@@ -111,7 +97,7 @@ pub fn get_operand(cpu: &mut Cpu, addr_mode: &AddressingMode) -> GetOperandResul
             let indir_addr = (cpu.registers.y as u16 + operand_addr).into();
 
             // A <- $23
-            cpu.read_u8_at(&indir_addr).into()
+            GetOperandResult::Value(cpu.read_u8_at(&indir_addr) as i8)
         }
     }
 }

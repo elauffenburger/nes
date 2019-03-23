@@ -1,4 +1,4 @@
-use crate::bits::{set_bit_val, bool_to_bit};
+use crate::bits::{bool_to_bit, set_bit_val};
 
 #[derive(Default)]
 pub struct Registers {
@@ -18,25 +18,39 @@ impl Registers {
             acc: 0x00,
             x: 0x00,
             y: 0x00,
-            p: ProcStatusFlags::default()
+            p: ProcStatusFlags::default(),
         }
     }
 }
 
-#[derive(Default)]
 pub struct ProcStatusFlags {
-    pub carry: bool,
-    pub zero: bool,
-    pub interrupt_disable: bool,
-    pub decimal_mode: bool,
-    pub break_command: bool,
-    pub overflow: bool,
     pub negative: bool,
+    pub overflow: bool,
+    pub break_command: bool,
+    pub decimal_mode: bool,
+    pub interrupt_disable: bool,
+    pub zero: bool,
+    pub carry: bool,
+}
+
+impl Default for ProcStatusFlags {
+    fn default() -> Self {
+        ProcStatusFlags {
+            negative: false,
+            overflow: false,
+            break_command: true,
+            decimal_mode: false,
+            interrupt_disable: false,
+            zero: false,
+            carry: false,
+        }
+    }
 }
 
 impl std::fmt::Debug for ProcStatusFlags {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
-        write!(f, 
+        write!(
+            f,
             "NV-BDIZC ({}{}1{}{}{}{}{})",
             bool_to_bit(self.negative),
             bool_to_bit(self.overflow),
@@ -51,18 +65,7 @@ impl std::fmt::Debug for ProcStatusFlags {
 
 impl Into<u8> for ProcStatusFlags {
     fn into(self) -> u8 {
-        let mut result: u8 = 0;
-
-        result = set_bit_val(result, 0, self.carry);
-        result = set_bit_val(result, 1, self.zero);
-        result = set_bit_val(result, 2, self.interrupt_disable);
-        result = set_bit_val(result, 3, self.decimal_mode);
-        result = set_bit_val(result, 4, self.break_command);
-        result = set_bit_val(result, 5, true);
-        result = set_bit_val(result, 6, self.overflow);
-        result = set_bit_val(result, 7, self.negative);
-
-        result
+        self.into_u8()
     }
 }
 
@@ -77,5 +80,22 @@ impl Clone for ProcStatusFlags {
             overflow: self.overflow,
             negative: self.negative,
         }
+    }
+}
+
+impl ProcStatusFlags {
+    pub fn into_u8(&self) -> u8 {
+        let mut result: u8 = 0;
+
+        result = set_bit_val(result, 0, self.carry);
+        result = set_bit_val(result, 1, self.zero);
+        result = set_bit_val(result, 2, self.interrupt_disable);
+        result = set_bit_val(result, 3, self.decimal_mode);
+        result = set_bit_val(result, 4, self.break_command);
+        result = set_bit_val(result, 5, true);
+        result = set_bit_val(result, 6, self.overflow);
+        result = set_bit_val(result, 7, self.negative);
+
+        result
     }
 }

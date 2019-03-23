@@ -69,6 +69,10 @@ impl Cpu {
             if self.is_stopped {
                 break;
             }
+
+            if debug {
+                println!("");
+            }
         }
     }
 
@@ -138,13 +142,7 @@ impl Cpu {
     where
         F: Fn(&mut Cpu),
     {
-        let acc_pre = self.registers.acc;
-
         instr(self);
-
-        let acc_post = self.registers.acc;
-
-        // todo: set status flags based on pre and post states
     }
 
     pub fn stop(&mut self) {
@@ -189,6 +187,30 @@ mod test {
 
         assert_eq!(cpu.registers.acc as u8, 0x00);
         assert_eq!(cpu.registers.x as u8, 0x03);
+    }
+
+    #[test]
+    fn lda_cmp_bne_sta_brk() {
+        let mut cpu = Cpu::new(true);
+
+        load_program_str(&mut cpu, "a9 01 c9 02 d0 02 85 22 00");
+
+        cpu.run();
+
+        assert_eq!(cpu.registers.acc as u8, 0x01);
+        assert_eq!(cpu.registers.p.into_u8(), 0b10110100);
+    }
+
+    #[test]
+    fn lda_sta_lda_sta_jmp() {
+        let mut cpu = Cpu::new(true);
+
+        load_program_str(&mut cpu, "a9 01 85 f0 a9 cc 85 f1 6c f0 00");
+
+        cpu.run();
+
+        assert_eq!(cpu.registers.acc as u8, 0xcc);
+        assert_eq!(cpu.registers.p.into_u8(), 0b10110100);
     }
 
     fn to_bytes<'a>(byte_str: &'a str) -> Vec<u8> {
