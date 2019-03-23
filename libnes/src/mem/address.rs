@@ -96,6 +96,14 @@ impl Add<i8> for &Address {
     }
 }
 
+impl Clone for Address {
+    fn clone(&self) -> Self {
+        let as_u16: u16 = self.into();
+
+        as_u16.into()
+    }
+}
+
 impl Address {
     fn add(&self, raw_addr: i16) -> Address {
         let addr: u16 = self.into();
