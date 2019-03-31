@@ -35,6 +35,26 @@ pub fn bool_to_bit(val: bool) -> u8 {
     }
 }
 
+pub enum RotateDirection {
+    Left,
+    Right
+}
+
+pub fn rotate(value: u8, direction: RotateDirection) -> (u8, bool) {
+    match direction {
+        RotateDirection::Left => {
+            let old_bit_7 = get_bit_val(value, 7);
+
+            (set_bit_val(value << 1, 0, old_bit_7), old_bit_7)
+        },
+        RotateDirection::Right => {
+            let old_bit_0 = get_bit_val(value, 0);
+
+            (set_bit_val(value >> 1, 7, old_bit_0), old_bit_0)
+        } 
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -53,5 +73,21 @@ mod test {
         assert_eq!(0b10000000, set_bit_val(0b00000000, 7, true));
         assert_eq!(0b10000000, set_bit_val(0b10010000, 4, false));
         assert_eq!(0b10010000, set_bit_val(0b10000000, 4, true));
+    }
+
+    #[test]
+    fn can_rotate_left() {
+        assert_eq!((0b00000000, false), rotate(0b00000000, RotateDirection::Left));
+        assert_eq!((0b00000010, false), rotate(0b00000001, RotateDirection::Left));
+        assert_eq!((0b00000001, true), rotate(0b10000000, RotateDirection::Left));
+        assert_eq!((0b00100011, true), rotate(0b10010001, RotateDirection::Left));
+    }
+
+    #[test]
+    fn can_rotate_right() {
+        assert_eq!((0b00000000, false), rotate(0b00000000, RotateDirection::Right));
+        assert_eq!((0b00000001, false), rotate(0b00000010, RotateDirection::Right));
+        assert_eq!((0b10000000, true), rotate(0b00000001, RotateDirection::Right));
+        assert_eq!((0b10010001, true), rotate(0b00100011, RotateDirection::Right));
     }
 }

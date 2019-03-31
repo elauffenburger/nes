@@ -1,5 +1,7 @@
+use byteorder::{ByteOrder, LittleEndian};
+
 use super::helpers::*;
-use crate::bits::{get_bit_val, lsb, msb, set_bit_val};
+use crate::bits::{get_bit_val, lsb, msb, rotate, set_bit_val, RotateDirection};
 use crate::cpu::instr::addressing::AddressingMode;
 use crate::cpu::Cpu;
 
@@ -251,7 +253,14 @@ pub fn jmp(cpu: &mut Cpu, addr_mode: AddressingMode) {
 }
 
 pub fn jsr(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    let return_addr = cpu.registers.pc + 2;
+
+    let operand = get_operand(cpu, &addr_mode);
+    let addr = operand.resolve_addr();
+
+    cpu.push_bytes(&[msb(return_addr), lsb(return_addr)]);
+
+    cpu.registers.pc = addr.into();
 }
 
 pub fn lda(cpu: &mut Cpu, addr_mode: AddressingMode) {
@@ -282,63 +291,112 @@ pub fn ldy(cpu: &mut Cpu, addr_mode: AddressingMode) {
 }
 
 pub fn lsr(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    panic!("instr not implemented!");
 }
 
 pub fn nop(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    // do...nothing
 }
 
 pub fn ora(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    panic!("instr not implemented!");
 }
 
 pub fn pha(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    panic!("instr not implemented!");
 }
 
 pub fn php(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    panic!("instr not implemented!");
 }
 
 pub fn pla(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    panic!("instr not implemented!");
 }
 
 pub fn plp(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    panic!("instr not implemented!");
 }
 
 pub fn rol(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    let new_carry_flag = match &addr_mode {
+        &AddressingMode::Acc => {
+            let (new_value, old_bit_7) = rotate(cpu.registers.acc as u8, RotateDirection::Left);
+
+            // acc <- acc shifted one bit with bit 0 set to the old carry flag
+            cpu.registers.acc = set_bit_val(new_value, 0, cpu.registers.p.carry) as i8;
+
+            old_bit_7
+        }
+        _ => {
+            let operand = get_operand(cpu, &addr_mode);
+            let addr = operand.resolve_addr();
+            let value = operand.resolve_value(cpu) as u8;
+
+            let (new_value, old_bit_7) = rotate(value, RotateDirection::Left);
+
+            cpu.write_bytes_to(&addr, &[set_bit_val(new_value, 0, cpu.registers.p.carry)]);
+
+            old_bit_7
+        }
+    };
+
+    cpu.registers.p.carry = new_carry_flag;
 }
 
 pub fn ror(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    let new_carry_flag = match &addr_mode {
+        &AddressingMode::Acc => {
+            let (new_value, old_bit_0) = rotate(cpu.registers.acc as u8, RotateDirection::Right);
+
+            // acc <- acc shifted one bit with bit 7 set to the old carry flag
+            cpu.registers.acc = set_bit_val(new_value, 7, cpu.registers.p.carry) as i8;
+
+            old_bit_0
+        }
+        _ => {
+            let operand = get_operand(cpu, &addr_mode);
+            let addr = operand.resolve_addr();
+            let value = operand.resolve_value(cpu) as u8;
+
+            let (new_value, old_bit_0) = rotate(value, RotateDirection::Right);
+
+            cpu.write_bytes_to(&addr, &[set_bit_val(new_value, 7, cpu.registers.p.carry)]);
+
+            old_bit_0
+        }
+    };
+
+    cpu.registers.p.carry = new_carry_flag;
 }
 
 pub fn rti(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    panic!("instr not implemented!");
 }
 
 pub fn rts(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    let addr_lo = cpu.pop();
+    let addr_hi = cpu.pop();
+
+    let addr = LittleEndian::read_u16(&[addr_lo, addr_hi]);
+
+    cpu.registers.pc = addr;
 }
 
 pub fn sbc(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    panic!("instr not implemented!");
 }
 
 pub fn sec(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    panic!("instr not implemented!");
 }
 
 pub fn sed(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    panic!("instr not implemented!");
 }
 
 pub fn sei(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    panic!("instr not implemented!");
 }
 
 pub fn sta(cpu: &mut Cpu, addr_mode: AddressingMode) {
@@ -379,19 +437,19 @@ pub fn tay(cpu: &mut Cpu, addr_mode: AddressingMode) {
 }
 
 pub fn tsx(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    panic!("instr not implemented!");
 }
 
 pub fn txa(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    panic!("instr not implemented!");
 }
 
 pub fn txs(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    panic!("instr not implemented!");
 }
 
 pub fn tya(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.perform_instr(|cpu: &mut Cpu| panic!("instr not implemented!"));
+    panic!("instr not implemented!");
 }
 
 // helpers

@@ -138,6 +138,20 @@ impl Cpu {
         self.write_bytes_to(&self.registers.sp.into(), &[val]);
     }
 
+    pub fn push_bytes(&mut self, bytes: &[u8]) {
+        for byte in bytes.iter() {
+            self.registers.sp -= 1;
+            self.write_bytes_to(&self.registers.sp.into(), &[byte.clone()]);
+        }
+    }
+
+    pub fn pop(&mut self) -> u8 {
+        let value = self.read_u8_at(&self.registers.sp.into());
+        self.registers.sp += 1;
+
+        value
+    }
+
     pub fn perform_instr<F>(&mut self, instr: F)
     where
         F: Fn(&mut Cpu),
@@ -152,6 +166,7 @@ impl Cpu {
 
 #[cfg(test)]
 mod test {
+    use crate::bits::{msb, lsb};
     use super::{Address, Cpu, BRK_INTERRUPT_ADDR_START, RESET_INTERRUPT_ADDR_START};
 
     #[test]
@@ -213,6 +228,63 @@ mod test {
         assert_eq!(cpu.registers.p.into_u8(), 0b10110100);
     }
 
+    #[test]
+    fn jsr_lda_rts() {
+        let mut cpu = Cpu::new(true);
+
+        load_program_str(&mut cpu, "a9 01 20 08 06 a9 03 00 a9 02 60");
+
+        cpu.run();
+
+        assert_eq!(cpu.registers.acc as u8, 0x03);
+    }
+
+    #[test]
+    fn rol_acc() {
+        let mut cpu = Cpu::new(true);
+
+        load_program_str(&mut cpu, "a9 81 2a");
+
+        cpu.run();
+
+        assert_eq!(cpu.registers.acc as u8, 0x02);
+    }
+
+    #[test]
+    fn ror_acc() {
+        let mut cpu = Cpu::new(true);
+
+        load_program_str(&mut cpu, "a9 81 6a");
+
+        cpu.run();
+
+        assert_eq!(cpu.registers.acc as u8, 0x40);
+    }
+
+    #[test]
+    fn rol_mem() {
+        let mut cpu = Cpu::new(true);
+
+        load_program_str(&mut cpu, "a9 81 8d 00 80 2e 00 80");
+
+        cpu.run();
+
+        assert_eq!(cpu.registers.acc as u8, 0x81);
+        assert_eq!(cpu.read_u8_at(&0x8000u16.into()), 0x02);
+    }
+
+    #[test]
+    fn ror_mem() {
+        let mut cpu = Cpu::new(true);
+
+        load_program_str(&mut cpu, "a9 81 8d 00 80 6e 00 80");
+
+        cpu.run();
+
+        assert_eq!(cpu.registers.acc as u8, 0x81);
+        assert_eq!(cpu.read_u8_at(&0x8000u16.into()), 0x40);
+    }
+
     fn to_bytes<'a>(byte_str: &'a str) -> Vec<u8> {
         byte_str
             .split(" ")
@@ -225,9 +297,13 @@ mod test {
     }
 
     fn load_program_str(cpu: &mut Cpu, prog: &'static str) {
+        load_program_str_with_options(cpu, prog, 0x0600)
+    }
+
+    fn load_program_str_with_options(cpu: &mut Cpu, prog: &'static str, start_addr: u16 ) {
         // write interrupt routine addr
-        cpu.write_bytes_to(&Address::from(RESET_INTERRUPT_ADDR_START), &[0x2d, 0xd2]);
-        cpu.write_bytes_to(&Address::from(0xd22d), &to_bytes(prog));
+        cpu.write_bytes_to(&Address::from(RESET_INTERRUPT_ADDR_START), &[lsb(start_addr), msb(start_addr)]);
+        cpu.write_bytes_to(&Address::from(start_addr), &to_bytes(prog));
 
         // write stp instr to brk irq vector address (so that'll be run at the first brk)
         cpu.write_bytes_to(&Address::from(BRK_INTERRUPT_ADDR_START), &[0xef, 0xbe]);
