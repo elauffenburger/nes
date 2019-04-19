@@ -14,10 +14,15 @@ pub fn set_bit_val(num: u8, bit_num: usize, val: bool) -> u8 {
     }
 }
 
-fn guard_bit_op(bit_num: usize) {
-    if bit_num < 0 || bit_num > 7 {
-        panic!("bit_num {} must be between 0 and 7", bit_num);
-    }
+pub fn to_bytes<'a>(byte_str: &'a str) -> Vec<u8> {
+    byte_str
+        .split(" ")
+        .map(|b| {
+            let byte = u8::from_str_radix(b.clone(), 16).unwrap();
+
+            byte
+        })
+        .collect::<Vec<u8>>()
 }
 
 pub fn lsb(num: u16) -> u8 {
@@ -37,7 +42,7 @@ pub fn bool_to_bit(val: bool) -> u8 {
 
 pub enum RotateDirection {
     Left,
-    Right
+    Right,
 }
 
 pub fn rotate(value: u8, direction: RotateDirection) -> (u8, bool) {
@@ -46,12 +51,18 @@ pub fn rotate(value: u8, direction: RotateDirection) -> (u8, bool) {
             let old_bit_7 = get_bit_val(value, 7);
 
             (set_bit_val(value << 1, 0, old_bit_7), old_bit_7)
-        },
+        }
         RotateDirection::Right => {
             let old_bit_0 = get_bit_val(value, 0);
 
             (set_bit_val(value >> 1, 7, old_bit_0), old_bit_0)
-        } 
+        }
+    }
+}
+
+fn guard_bit_op(bit_num: usize) {
+    if bit_num < 0 || bit_num > 7 {
+        panic!("bit_num {} must be between 0 and 7", bit_num);
     }
 }
 
@@ -77,17 +88,41 @@ mod test {
 
     #[test]
     fn can_rotate_left() {
-        assert_eq!((0b00000000, false), rotate(0b00000000, RotateDirection::Left));
-        assert_eq!((0b00000010, false), rotate(0b00000001, RotateDirection::Left));
-        assert_eq!((0b00000001, true), rotate(0b10000000, RotateDirection::Left));
-        assert_eq!((0b00100011, true), rotate(0b10010001, RotateDirection::Left));
+        assert_eq!(
+            (0b00000000, false),
+            rotate(0b00000000, RotateDirection::Left)
+        );
+        assert_eq!(
+            (0b00000010, false),
+            rotate(0b00000001, RotateDirection::Left)
+        );
+        assert_eq!(
+            (0b00000001, true),
+            rotate(0b10000000, RotateDirection::Left)
+        );
+        assert_eq!(
+            (0b00100011, true),
+            rotate(0b10010001, RotateDirection::Left)
+        );
     }
 
     #[test]
     fn can_rotate_right() {
-        assert_eq!((0b00000000, false), rotate(0b00000000, RotateDirection::Right));
-        assert_eq!((0b00000001, false), rotate(0b00000010, RotateDirection::Right));
-        assert_eq!((0b10000000, true), rotate(0b00000001, RotateDirection::Right));
-        assert_eq!((0b10010001, true), rotate(0b00100011, RotateDirection::Right));
+        assert_eq!(
+            (0b00000000, false),
+            rotate(0b00000000, RotateDirection::Right)
+        );
+        assert_eq!(
+            (0b00000001, false),
+            rotate(0b00000010, RotateDirection::Right)
+        );
+        assert_eq!(
+            (0b10000000, true),
+            rotate(0b00000001, RotateDirection::Right)
+        );
+        assert_eq!(
+            (0b10010001, true),
+            rotate(0b00100011, RotateDirection::Right)
+        );
     }
 }

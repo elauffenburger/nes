@@ -10,12 +10,12 @@ pub trait MemoryMap {
 }
 
 pub struct CpuMemoryMap {
-    memory: [u8; 0xffff],
+    memory: [u8; 0xffff + 1],
 }
 
 impl CpuMemoryMap {
     pub fn new() -> CpuMemoryMap {
-        CpuMemoryMap { memory: [0; 0xffff]}
+        CpuMemoryMap { memory: [0; 0xffff + 1]}
     }
 }
 

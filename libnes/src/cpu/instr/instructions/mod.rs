@@ -21,7 +21,7 @@ impl<'op, 'cpu> CpuInstruction<'op, 'cpu> {
 
 impl<'op, 'cpu> std::fmt::Debug for CpuInstruction<'op, 'cpu> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
-        write!(f, "{} ({:x})", self.instr, self.opcode)
+        write!(f, "{} ({:#04x})", self.instr, self.opcode)
     }
 }
 
@@ -253,7 +253,7 @@ impl<'op, 'cpu> CpuInstruction<'op, 'cpu> {
 
             0x98 => CpuInstruction::new(opcode, cpu, "tya", AddressingMode::Implied, &tya),
 
-            _ => panic!("opcode {:x} is not implemented!", opcode),
+            _ => panic!("opcode {:#04x} is not implemented!", opcode),
         }
     }
 }

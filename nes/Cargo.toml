@@ -5,6 +5,7 @@ authors = ["Eric"]
 edition = "2018"
 
 [dependencies]
+clap = "2.33.0"
 
 [dependencies.libnes]
 path = "../libnes"

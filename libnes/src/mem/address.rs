@@ -31,7 +31,7 @@ impl From<u16> for Address {
             0x8000...0xbfff => Address::PrgRomLowerBank(val),
             0xc000...0xffff => Address::PrgRomUpperBank(val),
             _ => panic!(format!(
-                "Bad address '{:x}' while converting from u16 to Address",
+                "Bad address '{:#06x}' while converting from u16 to Address",
                 val
             )),
         }
@@ -80,19 +80,19 @@ impl Into<u16> for Address {
     }
 }
 
-impl Add<u16> for &Address {
-    type Output = Address;
-
-    fn add(self, raw_addr: u16) -> Address {
-        Address::add(self, raw_addr as i16)
-    }
-}
-
 impl Add<i8> for &Address {
     type Output = Address;
 
-    fn add(self, raw_addr: i8) -> Address {
-        Address::add(self, raw_addr as i16)
+    fn add(self, offset: i8) -> Address {
+        Address::add_signed_offset(self, offset)
+    }
+}
+
+impl Add<u8> for &Address {
+    type Output = Address;
+
+    fn add(self, offset: u8) -> Address {
+        Address::add_unsigned_offset(self, offset)
     }
 }
 
@@ -105,11 +105,21 @@ impl Clone for Address {
 }
 
 impl Address {
-    fn add(&self, raw_addr: i16) -> Address {
+    fn add_unsigned_offset(&self, offset: u8) -> Address {
         let addr: u16 = self.into();
 
         // todo: implement 6502 bugs & wrapping, etc.
-        ((addr as i16 + raw_addr) as u16).into()
+        addr.wrapping_add(offset as u16).into()
+    }
+
+    fn add_signed_offset(&self, offset: i8) -> Address {
+        let addr: u16 = self.into();
+
+        // todo: implement 6502 bugs & wrapping, etc.
+        match offset >= 0 {
+            true => addr.wrapping_add(offset as u16).into(),
+            false => addr.wrapping_sub((offset * -1) as u16).into(),
+        }
     }
 }
 

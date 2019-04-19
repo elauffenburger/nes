@@ -9,13 +9,32 @@ pub fn adc(cpu: &mut Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    cpu.registers.acc += value
-        + match cpu.registers.p.carry {
-            true => 1,
-            false => 0,
-        };
+    let carry_value = match cpu.registers.p.carry {
+        true => 1,
+        false => 0,
+    };
 
-    // TODO: impl flags
+    let to_add = value - carry_value;
+    let old_acc = cpu.registers.acc;
+
+    // overlowing_add actually checks if the value was CARRIED, not if there was a 2's complement overflow
+    let (new_acc, did_carry) = (cpu.registers.acc as u8).overflowing_add(to_add as u8);
+
+    let did_overflow = {
+        let extended_acc = old_acc as i16;
+        let extended_to_add = to_add as i16;
+
+        let extended_result = extended_acc + extended_to_add;
+
+        extended_result < -128 || extended_result > 127
+    };
+
+    cpu.registers.acc = new_acc as i8;
+
+    cpu.registers.p.carry = did_carry;
+    cpu.registers.p.zero = new_acc == 0;
+    cpu.registers.p.overflow = did_overflow;
+    cpu.registers.p.negative = get_bit_val(new_acc as u8, 7);
 }
 
 pub fn and(cpu: &mut Cpu, addr_mode: AddressingMode) {
@@ -24,7 +43,7 @@ pub fn and(cpu: &mut Cpu, addr_mode: AddressingMode) {
 
     cpu.registers.acc &= value;
 
-    set_zn_flags_from_result(cpu, cpu.registers.acc);
+    set_zn_flags_from_result(cpu, cpu.registers.acc as u8);
 }
 
 pub fn asl(cpu: &mut Cpu, addr_mode: AddressingMode) {
@@ -120,8 +139,7 @@ pub fn bpl(cpu: &mut Cpu, addr_mode: AddressingMode) {
 }
 
 pub fn brk(cpu: &mut Cpu, _: AddressingMode) {
-    cpu.push(msb(cpu.registers.pc));
-    cpu.push(lsb(cpu.registers.pc));
+    cpu.push_u16(cpu.registers.pc);
     cpu.push(cpu.registers.p.clone().into());
 
     cpu.registers.p.interrupt_disable = true;
@@ -146,19 +164,19 @@ pub fn bvs(cpu: &mut Cpu, addr_mode: AddressingMode) {
     }
 }
 
-pub fn clc(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn clc(cpu: &mut Cpu, _addr_mode: AddressingMode) {
     cpu.registers.p.carry = false;
 }
 
-pub fn cld(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn cld(cpu: &mut Cpu, _addr_mode: AddressingMode) {
     cpu.registers.p.decimal_mode = false;
 }
 
-pub fn cli(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn cli(cpu: &mut Cpu, _addr_mode: AddressingMode) {
     cpu.registers.p.interrupt_disable = false;
 }
 
-pub fn clv(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn clv(cpu: &mut Cpu, _addr_mode: AddressingMode) {
     cpu.registers.p.overflow = false;
 }
 
@@ -177,14 +195,14 @@ pub fn cpx(cpu: &mut Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    cpu.registers.p = flags_from_compare(cpu.registers.p.clone(), cpu.registers.x, value);
+    cpu.registers.p = flags_from_compare(cpu.registers.p.clone(), cpu.registers.x as i8, value);
 }
 
 pub fn cpy(cpu: &mut Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    cpu.registers.p = flags_from_compare(cpu.registers.p.clone(), cpu.registers.y, value);
+    cpu.registers.p = flags_from_compare(cpu.registers.p.clone(), cpu.registers.y as i8, value);
 }
 
 pub fn dec(cpu: &mut Cpu, addr_mode: AddressingMode) {
@@ -205,7 +223,7 @@ pub fn dex(cpu: &mut Cpu, _: AddressingMode) {
     set_zn_flags_from_result(cpu, cpu.registers.x);
 }
 
-pub fn dey(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn dey(cpu: &mut Cpu, _addr_mode: AddressingMode) {
     cpu.registers.y -= 1;
 
     set_zn_flags_from_result(cpu, cpu.registers.y);
@@ -217,7 +235,7 @@ pub fn eor(cpu: &mut Cpu, addr_mode: AddressingMode) {
 
     cpu.registers.acc ^= value;
 
-    set_zn_flags_from_result(cpu, cpu.registers.acc);
+    set_zn_flags_from_result(cpu, cpu.registers.acc as u8);
 }
 
 pub fn inc(cpu: &mut Cpu, addr_mode: AddressingMode) {
@@ -228,7 +246,7 @@ pub fn inc(cpu: &mut Cpu, addr_mode: AddressingMode) {
 
     cpu.write_bytes_to(&addr, &[result]);
 
-    set_zn_flags_from_result(cpu, result as i8);
+    set_zn_flags_from_result(cpu, result);
 }
 
 pub fn inx(cpu: &mut Cpu, _: AddressingMode) {
@@ -237,7 +255,7 @@ pub fn inx(cpu: &mut Cpu, _: AddressingMode) {
     set_zn_flags_from_result(cpu, cpu.registers.x);
 }
 
-pub fn iny(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn iny(cpu: &mut Cpu, _addr_mode: AddressingMode) {
     cpu.registers.y += 1;
 
     set_zn_flags_from_result(cpu, cpu.registers.y);
@@ -269,14 +287,14 @@ pub fn lda(cpu: &mut Cpu, addr_mode: AddressingMode) {
 
     cpu.registers.acc = value;
 
-    set_zn_flags_from_result(cpu, cpu.registers.acc);
+    set_zn_flags_from_result(cpu, cpu.registers.acc as u8);
 }
 
 pub fn ldx(cpu: &mut Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    cpu.registers.x = value;
+    cpu.registers.x = value as u8;
 
     set_zn_flags_from_result(cpu, cpu.registers.x);
 }
@@ -285,13 +303,39 @@ pub fn ldy(cpu: &mut Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    cpu.registers.y = value;
+    cpu.registers.y = value as u8;
 
     set_zn_flags_from_result(cpu, cpu.registers.y);
 }
 
 pub fn lsr(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    panic!("instr not implemented!");
+    let operand = get_operand(cpu, &addr_mode);
+
+    let (new_carry_flag, result) = match addr_mode {
+        AddressingMode::Acc => {
+            let old_bit_0 = get_bit_val(cpu.registers.acc as u8, 0);
+            let value = set_bit_val((cpu.registers.acc as u8) >> 1, 7, false);
+
+            cpu.registers.acc = value as i8;
+
+            (old_bit_0, value)
+        }
+        _ => {
+            let addr = operand.resolve_addr();
+            let value = operand.resolve_value(cpu) as u8;
+
+            let old_bit_0 = get_bit_val(value, 0);
+            let new_value = set_bit_val(value >> 1, 7, false);
+
+            cpu.write_bytes_to(&addr, &[new_value]);
+
+            (old_bit_0, new_value)
+        }
+    };
+
+    cpu.registers.p.carry = new_carry_flag;
+    cpu.registers.p.zero = result == 0;
+    cpu.registers.p.negative = get_bit_val(result, 7);
 }
 
 pub fn nop(cpu: &mut Cpu, addr_mode: AddressingMode) {
@@ -299,23 +343,36 @@ pub fn nop(cpu: &mut Cpu, addr_mode: AddressingMode) {
 }
 
 pub fn ora(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    panic!("instr not implemented!");
+    let operand = get_operand(cpu, &addr_mode);
+    let value = operand.resolve_value(cpu);
+
+    cpu.registers.acc = cpu.registers.acc | value;
+
+    cpu.registers.p.zero = cpu.registers.acc == 0;
+    cpu.registers.p.negative = get_bit_val(cpu.registers.acc as u8, 7);
 }
 
 pub fn pha(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    panic!("instr not implemented!");
+    cpu.push(cpu.registers.acc as u8);
 }
 
 pub fn php(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    panic!("instr not implemented!");
+    cpu.push(cpu.registers.p.clone().into());
 }
 
 pub fn pla(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    panic!("instr not implemented!");
+    let value = cpu.pop();
+
+    cpu.registers.acc = value as i8;
+
+    cpu.registers.p.zero = cpu.registers.acc == 0;
+    cpu.registers.p.negative = get_bit_val(cpu.registers.acc as u8, 7);
 }
 
 pub fn plp(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    panic!("instr not implemented!");
+    let value = cpu.pop();
+
+    cpu.registers.p = value.into();
 }
 
 pub fn rol(cpu: &mut Cpu, addr_mode: AddressingMode) {
@@ -370,8 +427,9 @@ pub fn ror(cpu: &mut Cpu, addr_mode: AddressingMode) {
     cpu.registers.p.carry = new_carry_flag;
 }
 
-pub fn rti(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    panic!("instr not implemented!");
+pub fn rti(cpu: &mut Cpu, _addr_mode: AddressingMode) {
+    cpu.registers.p = cpu.pop().clone().into();
+    cpu.registers.pc = cpu.pop_u16().clone();
 }
 
 pub fn rts(cpu: &mut Cpu, addr_mode: AddressingMode) {
@@ -384,19 +442,47 @@ pub fn rts(cpu: &mut Cpu, addr_mode: AddressingMode) {
 }
 
 pub fn sbc(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    panic!("instr not implemented!");
+    let operand = get_operand(cpu, &addr_mode);
+    let value = operand.resolve_value(cpu);
+
+    let not_of_carry_value = match cpu.registers.p.carry {
+        true => 0,
+        false => 1,
+    };
+
+    let to_subtract = value - not_of_carry_value;
+    let old_acc = cpu.registers.acc;
+
+    // overlowing_add actually checks if the value was CARRIED, not if there was a 2's complement overflow
+    let (new_acc, did_carry) = (cpu.registers.acc as u8).overflowing_sub(to_subtract as u8);
+
+    let did_overflow = {
+        let extended_acc = old_acc as i16;
+        let extended_to_subtract = to_subtract as i16;
+
+        let extended_result = extended_acc - extended_to_subtract;
+
+        extended_result < -128 || extended_result > 127
+    };
+
+    cpu.registers.acc = new_acc as i8;
+
+    cpu.registers.p.carry = did_carry;
+    cpu.registers.p.zero = new_acc == 0;
+    cpu.registers.p.overflow = did_overflow;
+    cpu.registers.p.negative = get_bit_val(new_acc as u8, 7);
 }
 
-pub fn sec(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    panic!("instr not implemented!");
+pub fn sec(cpu: &mut Cpu, _addr_mode: AddressingMode) {
+    cpu.registers.p.carry = true;
 }
 
-pub fn sed(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    panic!("instr not implemented!");
+pub fn sed(cpu: &mut Cpu, _addr_mode: AddressingMode) {
+    cpu.registers.p.decimal_mode = true;
 }
 
-pub fn sei(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    panic!("instr not implemented!");
+pub fn sei(cpu: &mut Cpu, _addr_mode: AddressingMode) {
+    cpu.registers.p.interrupt_disable = true;
 }
 
 pub fn sta(cpu: &mut Cpu, addr_mode: AddressingMode) {
@@ -425,31 +511,37 @@ pub fn sty(cpu: &mut Cpu, addr_mode: AddressingMode) {
 }
 
 pub fn tax(cpu: &mut Cpu, _: AddressingMode) {
-    cpu.registers.x = cpu.registers.acc;
+    cpu.registers.x = cpu.registers.acc as u8;
 
     set_zn_flags_from_result(cpu, cpu.registers.x);
 }
 
-pub fn tay(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.registers.y = cpu.registers.acc;
+pub fn tay(cpu: &mut Cpu, _addr_mode: AddressingMode) {
+    cpu.registers.y = cpu.registers.acc as u8;
 
     set_zn_flags_from_result(cpu, cpu.registers.y);
 }
 
-pub fn tsx(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    panic!("instr not implemented!");
+pub fn tsx(cpu: &mut Cpu, _addr_mode: AddressingMode) {
+    cpu.registers.x = cpu.registers.sp;
+
+    set_zn_flags_from_result(cpu, cpu.registers.x);
 }
 
-pub fn txa(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    panic!("instr not implemented!");
+pub fn txa(cpu: &mut Cpu, _addr_mode: AddressingMode) {
+    cpu.registers.acc = cpu.registers.x as i8;
+
+    set_zn_flags_from_result(cpu, cpu.registers.acc as u8);
 }
 
-pub fn txs(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    panic!("instr not implemented!");
+pub fn txs(cpu: &mut Cpu, _addr_mode: AddressingMode) {
+    cpu.registers.sp = cpu.registers.x;
 }
 
-pub fn tya(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    panic!("instr not implemented!");
+pub fn tya(cpu: &mut Cpu, _addr_mode: AddressingMode) {
+    cpu.registers.acc = cpu.registers.y as i8;
+
+    set_zn_flags_from_result(cpu, cpu.registers.acc as u8);
 }
 
 // helpers
@@ -458,7 +550,7 @@ fn apply_branch_offset(pc: u16, offset: i8) -> u16 {
     (pc as i32 + offset as i32) as u16
 }
 
-fn set_zn_flags_from_result(cpu: &mut Cpu, result: i8) {
+fn set_zn_flags_from_result(cpu: &mut Cpu, result: u8) {
     cpu.registers.p.zero = result == 0;
-    cpu.registers.p.negative = get_bit_val(result as u8, 7);
+    cpu.registers.p.negative = get_bit_val(result, 7);
 }

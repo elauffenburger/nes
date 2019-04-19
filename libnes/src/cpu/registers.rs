@@ -1,12 +1,12 @@
-use crate::bits::{bool_to_bit, set_bit_val};
+use crate::bits::{bool_to_bit, get_bit_val, set_bit_val};
 
 #[derive(Default)]
 pub struct Registers {
     pub pc: u16,
     pub sp: u8,
     pub acc: i8,
-    pub x: i8,
-    pub y: i8,
+    pub x: u8,
+    pub y: u8,
     pub p: ProcStatusFlags,
 }
 
@@ -69,6 +69,12 @@ impl Into<u8> for ProcStatusFlags {
     }
 }
 
+impl From<u8> for ProcStatusFlags {
+    fn from(val: u8) -> Self {
+        ProcStatusFlags::from_u8(val)
+    }
+}
+
 impl Clone for ProcStatusFlags {
     fn clone(&self) -> Self {
         ProcStatusFlags {
@@ -97,5 +103,17 @@ impl ProcStatusFlags {
         result = set_bit_val(result, 7, self.negative);
 
         result
+    }
+
+    pub fn from_u8(val: u8) -> Self {
+        ProcStatusFlags {
+            carry: get_bit_val(val, 0),
+            zero: get_bit_val(val, 1),
+            interrupt_disable: get_bit_val(val, 2),
+            decimal_mode: get_bit_val(val, 3),
+            break_command: get_bit_val(val, 4),
+            overflow: get_bit_val(val, 6),
+            negative: get_bit_val(val, 7),
+        }
     }
 }

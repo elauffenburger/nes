@@ -1,14 +1,16 @@
+use crate::bits::lsb;
+use crate::bits::msb;
 use byteorder::{ByteOrder, LittleEndian};
 use std::fmt::Debug;
 
 use super::Registers;
-use crate::cpu::instr::{CpuInstruction};
+use crate::cpu::instr::CpuInstruction;
 use crate::mem::{Address, CpuMemoryMap, MemoryMap};
 
-const NMI_INTERRUPT_ADDR_START: u16 = 0xfffa;
-const RESET_INTERRUPT_ADDR_START: u16 = 0xfffc;
-const IRQ_INTERRUPT_ADDR_START: u16 = 0xfffe;
-const BRK_INTERRUPT_ADDR_START: u16 = 0xffe6;
+pub const NMI_INTERRUPT_ADDR_START: u16 = 0xfffa;
+pub const RESET_INTERRUPT_ADDR_START: u16 = 0xfffc;
+pub const IRQ_INTERRUPT_ADDR_START: u16 = 0xfffe;
+pub const BRK_INTERRUPT_ADDR_START: u16 = 0xffe6;
 
 pub struct Cpu {
     pub memory: Box<MemoryMap>,
@@ -19,14 +21,16 @@ pub struct Cpu {
 
 impl Debug for Cpu {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
-        write!(f, 
-            "A: {:x}, X: {:x}, Y: {:x}, SP: {:x}, PC: {:x}, P: {:?}", 
-            self.registers.acc, 
-            self.registers.x, 
-            self.registers.y, 
+        write!(
+            f,
+            "A: {:#04x}, X: {:#04x}, Y: {:#04x}, SP: {:#04x}, PC: {:#06x}, P: {:?}",
+            self.registers.acc,
+            self.registers.x,
+            self.registers.y,
             self.registers.sp,
             self.registers.pc,
-            self.registers.p)
+            self.registers.p
+        )
     }
 }
 
@@ -48,45 +52,47 @@ impl Cpu {
         self.startup();
 
         loop {
-            let debug = self.debug;
-
-            if debug {
-                println!("cpu pre: {:?}", self);
-            }
-            
-            let instruction = self.next_instr();
-
-            if debug {
-                println!("instr: {:?}", instruction);
-            }
-
-            instruction.run();
-
-            if debug {
-                println!("cpu post: {:?}", self);
-            }
+            self.step();
 
             if self.is_stopped {
                 break;
             }
+        }
 
-            if debug {
-                println!("");
-            }
+        if self.debug {
+            println!("");
         }
     }
 
-    fn next_instr(&mut self) -> CpuInstruction {
-        let opcode = self.next_u8();
+    pub fn step(&mut self) {
+        let debug = self.debug;
 
-        CpuInstruction::from(opcode, self)
+        if debug {
+            println!("cpu pre: {:?}", self);
+        }
+
+        let instruction = self.next_instr();
+
+        if debug {
+            println!("instr: {:?}", instruction);
+        }
+
+        instruction.run();
+
+        if debug {
+            println!("cpu post: {:?}", self);
+        }
+
+        if debug {
+            println!("");
+        }
     }
 
-    fn startup(&mut self) {
+    pub fn startup(&mut self) {
         self.reset();
     }
 
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         let (lower, upper) = (
             self.read_u8_at(&RESET_INTERRUPT_ADDR_START.into()),
             self.read_u8_at(&(RESET_INTERRUPT_ADDR_START + 1).into()),
@@ -113,9 +119,13 @@ impl Cpu {
         LittleEndian::read_u16(&[lower, upper])
     }
 
-    pub fn write_bytes_to(&mut self, addr: &Address, bytes: &[u8]) {
+    pub fn write_bytes_to(&mut self, start_addr: &Address, bytes: &[u8]) {
+        let raw_start_addr: u16 = start_addr.into();
+
         for (i, byte) in bytes.iter().enumerate() {
-            self.memory.set(&(addr + (i as u16)), byte.clone());
+            let addr = (raw_start_addr + (i as u16)).into();
+
+            self.memory.set(&addr, byte.clone());
         }
     }
 
@@ -124,7 +134,7 @@ impl Cpu {
     }
 
     pub fn read_u16_at(&self, addr: &Address) -> u16 {
-        let (first_byte_addr, second_byte_addr) = (addr, addr + (1 as u16));
+        let (first_byte_addr, second_byte_addr) = (addr, addr + (1 as u8));
         let (lower, upper) = (
             self.read_u8_at(&first_byte_addr),
             self.read_u8_at(&second_byte_addr),
@@ -136,6 +146,10 @@ impl Cpu {
     pub fn push(&mut self, val: u8) {
         self.registers.sp -= 1;
         self.write_bytes_to(&self.registers.sp.into(), &[val]);
+    }
+
+    pub fn push_u16(&mut self, val: u16) {
+        self.push_bytes(&[msb(val), lsb(val)]);
     }
 
     pub fn push_bytes(&mut self, bytes: &[u8]) {
@@ -152,6 +166,13 @@ impl Cpu {
         value
     }
 
+    pub fn pop_u16(&mut self) -> u16 {
+        let lo = self.pop();
+        let hi = self.pop();
+
+        LittleEndian::read_u16(&[lo, hi])
+    }
+
     pub fn perform_instr<F>(&mut self, instr: F)
     where
         F: Fn(&mut Cpu),
@@ -162,12 +183,28 @@ impl Cpu {
     pub fn stop(&mut self) {
         self.is_stopped = true;
     }
+
+    pub fn is_running(&self) -> bool {
+        !self.is_stopped
+    }
+
+    fn next_instr(&mut self) -> CpuInstruction {
+        let opcode = self.next_u8();
+
+        CpuInstruction::from(opcode, self)
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::bits::{msb, lsb};
-    use super::{Address, Cpu, BRK_INTERRUPT_ADDR_START, RESET_INTERRUPT_ADDR_START};
+    use std::fs::File;
+    use std::io::prelude::*;
+    use std::path::Path;
+    use std::sync::mpsc::channel;
+    use std::time::Duration;
+
+    use crate::cpu::Cpu;
+    use crate::cpu::helpers::*;
 
     #[test]
     fn basic_program() {
@@ -285,28 +322,80 @@ mod test {
         assert_eq!(cpu.read_u8_at(&0x8000u16.into()), 0x40);
     }
 
-    fn to_bytes<'a>(byte_str: &'a str) -> Vec<u8> {
-        byte_str
-            .split(" ")
-            .map(|b| {
-                let byte = u8::from_str_radix(b.clone(), 16).unwrap();
+    #[test]
+    fn snake() {
+        let mut cpu = Cpu::new(true);
 
-                byte
-            })
-            .collect::<Vec<u8>>()
+        let prog_parts = vec![
+            "20 06 06 20 38 06 20 0d 06 20 2a 06 60 a9 02 85",
+            "02 a9 04 85 03 a9 11 85 10 a9 10 85 12 a9 0f 85",
+            "14 a9 04 85 11 85 13 85 15 60 a5 fe 85 00 a5 fe",
+            "29 03 18 69 02 85 01 60 20 4d 06 20 8d 06 20 c3",
+            "06 20 19 07 20 20 07 20 2d 07 4c 38 06 a5 ff c9",
+            "77 f0 0d c9 64 f0 14 c9 73 f0 1b c9 61 f0 22 60",
+            "a9 04 24 02 d0 26 a9 01 85 02 60 a9 08 24 02 d0",
+            "1b a9 02 85 02 60 a9 01 24 02 d0 10 a9 04 85 02",
+            "60 a9 02 24 02 d0 05 a9 08 85 02 60 60 20 94 06",
+            "20 a8 06 60 a5 00 c5 10 d0 0d a5 01 c5 11 d0 07",
+            "e6 03 e6 03 20 2a 06 60 a2 02 b5 10 c5 10 d0 06",
+            "b5 11 c5 11 f0 09 e8 e8 e4 03 f0 06 4c aa 06 4c",
+            "35 07 60 a6 03 ca 8a b5 10 95 12 ca 10 f9 a5 02",
+            "4a b0 09 4a b0 19 4a b0 1f 4a b0 2f a5 10 38 e9",
+            "20 85 10 90 01 60 c6 11 a9 01 c5 11 f0 28 60 e6",
+            "10 a9 1f 24 10 f0 1f 60 a5 10 18 69 20 85 10 b0",
+            "01 60 e6 11 a9 06 c5 11 f0 0c 60 c6 10 a5 10 29",
+            "1f c9 1f f0 01 60 4c 35 07 a0 00 a5 fe 91 00 60",
+            "a6 03 a9 00 81 10 a2 00 a9 01 81 10 60 a2 00 ea",
+            "ea ca d0 fb 60",
+        ];
+        let prog = prog_parts.join(" ");
+
+        load_program_string(&mut cpu, prog);
+
+        cpu.run();
+
+        assert_eq!(cpu.registers.acc as u8, 0x81);
+        assert_eq!(cpu.read_u8_at(&0x8000u16.into()), 0x40);
     }
 
-    fn load_program_str(cpu: &mut Cpu, prog: &'static str) {
-        load_program_str_with_options(cpu, prog, 0x0600)
+    #[test]
+    #[ignore]
+    fn klaus() {
+        let mut klaus_prog_file = File::open(Path::new("./test/klaus/functional.bin")).unwrap();
+        let mut klaus_prog_vec = vec![];
+
+        klaus_prog_file.read_to_end(&mut klaus_prog_vec).unwrap();
+
+        timeout_test(Box::new(move || {
+            let mut cpu = Cpu::new(true);
+            load_program_vec_with_options(
+                &mut cpu,
+                klaus_prog_vec,
+                LoadProgramOptions {
+                    load_addr: 0x0000,
+                    start_addr: 0x0400,
+                    debug: true,
+                },
+            );
+
+            cpu.run();
+        }));
+
+        // fail the test to get output
+        assert!(false);
     }
 
-    fn load_program_str_with_options(cpu: &mut Cpu, prog: &'static str, start_addr: u16 ) {
-        // write interrupt routine addr
-        cpu.write_bytes_to(&Address::from(RESET_INTERRUPT_ADDR_START), &[lsb(start_addr), msb(start_addr)]);
-        cpu.write_bytes_to(&Address::from(start_addr), &to_bytes(prog));
+    fn timeout_test<F>(test: Box<F>)
+    where
+        F: 'static + std::marker::Send + FnOnce() -> (),
+    {
+        let (send, recv) = channel();
+        std::thread::spawn(move || {
+            test();
+            send.send("done!").unwrap();
+        });
 
-        // write stp instr to brk irq vector address (so that'll be run at the first brk)
-        cpu.write_bytes_to(&Address::from(BRK_INTERRUPT_ADDR_START), &[0xef, 0xbe]);
-        cpu.write_bytes_to(&Address::from(0xbeef), &to_bytes("db"));
+        let result = recv.recv_timeout(Duration::from_millis(1000));
+        result.unwrap();
     }
 }
