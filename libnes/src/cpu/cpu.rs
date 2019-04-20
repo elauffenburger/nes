@@ -17,6 +17,7 @@ pub struct Cpu {
     pub registers: Registers,
     is_stopped: bool,
     debug: bool,
+    has_started_up: bool,
 }
 
 impl Debug for Cpu {
@@ -41,6 +42,7 @@ impl Cpu {
             registers: Registers::new(),
             is_stopped: false,
             debug: debug,
+            has_started_up: false,
         }
     }
 
@@ -49,7 +51,9 @@ impl Cpu {
     }
 
     pub fn run(&mut self) {
-        self.startup();
+        if !self.has_started_up {
+            self.startup();
+        }
 
         loop {
             self.step();
@@ -205,8 +209,8 @@ mod test {
     use std::sync::mpsc::channel;
     use std::time::Duration;
 
-    use crate::cpu::Cpu;
     use crate::cpu::helpers::*;
+    use crate::cpu::Cpu;
 
     #[test]
     fn basic_program() {

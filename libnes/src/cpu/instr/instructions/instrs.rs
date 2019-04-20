@@ -218,13 +218,13 @@ pub fn dec(cpu: &mut Cpu, addr_mode: AddressingMode) {
 }
 
 pub fn dex(cpu: &mut Cpu, _: AddressingMode) {
-    cpu.registers.x -= 1;
+    cpu.registers.x = cpu.registers.x.overflowing_sub(1).0;
 
     set_zn_flags_from_result(cpu, cpu.registers.x);
 }
 
 pub fn dey(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.y -= 1;
+    cpu.registers.y = cpu.registers.y.overflowing_sub(1).0;
 
     set_zn_flags_from_result(cpu, cpu.registers.y);
 }
@@ -250,13 +250,13 @@ pub fn inc(cpu: &mut Cpu, addr_mode: AddressingMode) {
 }
 
 pub fn inx(cpu: &mut Cpu, _: AddressingMode) {
-    cpu.registers.x += 1;
+    cpu.registers.x = cpu.registers.x.overflowing_add(1).0;
 
     set_zn_flags_from_result(cpu, cpu.registers.x);
 }
 
 pub fn iny(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.y += 1;
+    cpu.registers.y = cpu.registers.y.overflowing_add(1).0;
 
     set_zn_flags_from_result(cpu, cpu.registers.y);
 }

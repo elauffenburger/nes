@@ -33,20 +33,18 @@ impl CartLoader for iNESLoader {
             false => 0,
         };
 
-        let prg_rom_raw = &cart_data[(rom_addr_offset + HEADER_SIZE)
-            ..(header.num_prg_rom_banks as usize * PRG_ROM_UNIT_SIZE)];
+        let prg_rom_start_addr = rom_addr_offset + HEADER_SIZE;
+        let prg_rom_end_addr =
+            prg_rom_start_addr + (header.num_prg_rom_banks as usize * PRG_ROM_UNIT_SIZE);
 
-        let prg_rom_padding = PRG_ROM_UNIT_SIZE - (prg_rom_raw.len() % PRG_ROM_UNIT_SIZE);
-
-        let mut prg_rom = prg_rom_raw.to_vec();
-        prg_rom.extend_from_slice(&vec![0u8; prg_rom_padding]);
+        let prg_rom = &cart_data[prg_rom_start_addr..prg_rom_end_addr];
 
         let mapper = get_mapper(header.mapper_id)?;
         mapper.map(
             cpu,
             MapperOptions {
                 cart_data: cart_data,
-                prg_rom: &prg_rom,
+                prg_rom: prg_rom,
             },
         )?;
 

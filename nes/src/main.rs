@@ -7,7 +7,7 @@ use std::io::{self, Read, Write};
 
 use clap::{App, Arg, ArgMatches, SubCommand};
 
-use libnes::cart::{get_cart_loader, RomFormat, CartLoader};
+use libnes::cart::{get_cart_loader, CartLoader, RomFormat};
 use libnes::cpu::helpers::load_program_str;
 use libnes::cpu::Cpu;
 
@@ -40,8 +40,10 @@ fn exec_command_cpu<'a>(options: &ArgMatches<'a>) {
 
             load_program_str(&mut cpu, program);
 
+            cpu.startup();
+
             match break_on_entry {
-                true => run_debugger_mode(&mut cpu),
+                true => start_debugger(&mut cpu),
                 false => cpu.run(),
             };
 
@@ -54,6 +56,7 @@ fn exec_command_run<'a>(options: &ArgMatches<'a>) {
     let debug = options.is_present("debug");
     let break_mode = options.is_present("break");
     let rom_format_str = options.value_of("format").expect("format is required");
+    let start_addr = options.value_of("startaddr");
 
     let rom_format = match rom_format_str {
         "ines" => RomFormat::iNes,
@@ -68,21 +71,32 @@ fn exec_command_run<'a>(options: &ArgMatches<'a>) {
 
     let mut cpu = Cpu::new(debug);
 
-    let cart_loader = get_cart_loader(rom_format).expect(&format!("Failed to resolve loader for rom format '{}'", rom_format_str));
-    cart_loader.load(&mut cpu, &cart_data).expect("Failed to load rom");
+    let cart_loader = get_cart_loader(rom_format).expect(&format!(
+        "Failed to resolve loader for rom format '{}'",
+        rom_format_str
+    ));
+
+    cart_loader
+        .load(&mut cpu, &cart_data)
+        .expect("Failed to load rom");
+    
+    cpu.startup();
+
+    if let Some(addr) = start_addr {
+        cpu.registers.pc = u16::from_str_radix(addr, 16).expect(&format!(
+            "Failed to parse starting address '{}' as a hexadecimal u16 value",
+            addr
+        ));
+    }
 
     match break_mode {
-        true => run_debugger_mode(&mut cpu),
+        true => start_debugger(&mut cpu),
         false => cpu.run(),
     };
 }
 
-fn run_debugger_mode(cpu: &mut Cpu) {
+fn start_debugger(cpu: &mut Cpu) {
     println!("Starting debugger...");
-
-    cpu.startup();
-
-    println!("Debugger started");
 
     let mut always_print_status = false;
 
@@ -170,6 +184,9 @@ fn get_cli_app<'a, 'b>() -> App<'a, 'b> {
                         .long("format")
                         .value_name("FORMAT")
                         .default_value("ines"),
+                    Arg::with_name("startaddr")
+                        .long("start-addr")
+                        .value_name("START_ADDRESS"),
                 ]),
         ])
 }
