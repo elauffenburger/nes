@@ -10,11 +10,11 @@ const DEFAULT_LOAD_PROG_OPTS: LoadProgramOptions = LoadProgramOptions {
     debug: false,
 };
 
-pub fn load_program_vec(cpu: &mut Cpu, prog: Vec<u8>) {
-    load_program_vec_with_options(cpu, prog, DEFAULT_LOAD_PROG_OPTS);
+pub fn load_program_bytes(cpu: &mut Cpu, prog: &[u8]) {
+    load_program_bytes_with_options(cpu, prog, DEFAULT_LOAD_PROG_OPTS);
 }
 
-pub fn load_program_vec_with_options(cpu: &mut Cpu, prog: Vec<u8>, opts: LoadProgramOptions) {
+pub fn load_program_bytes_with_options(cpu: &mut Cpu, prog: &[u8], opts: LoadProgramOptions) {
     let prog_str: String = prog.iter().map(|b| format!("{:x}", b)).join(" ");
 
     load_program_str_with_options(cpu, prog_str.as_str(), opts)

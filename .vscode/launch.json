@@ -5,10 +5,24 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug",
+            "name": "Debug Lib",
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/target/debug/libnes-d2b0a2de808ea313.exe",
+            "cwd": "${workspaceRoot}",
+        },
+        {
+            "name": "Debug NesTest",
+            "preLaunchTask": "cargo build",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/nes.exe",
+            "args": [
+                "run",
+                "--file",
+                "${workspaceFolder}/libnes/test/nes/nestest.nes",
+                "-d"
+            ],
             "cwd": "${workspaceRoot}",
         }
     ]

@@ -1,12 +1,14 @@
 extern crate clap;
 extern crate libnes;
 
+use std::fs;
 use std::io::BufRead;
 use std::io::{self, Read, Write};
 
 use clap::{App, Arg, ArgMatches, SubCommand};
-use libnes::cpu::helpers::load_program_str;
 
+use libnes::cart::{get_cart_loader, RomFormat, CartLoader};
+use libnes::cpu::helpers::load_program_str;
 use libnes::cpu::Cpu;
 
 fn main() {
@@ -15,14 +17,15 @@ fn main() {
 
     match app_matches.subcommand() {
         ("cpu", Some(options)) => {
-            run_command_cpu(options);
+            exec_command_cpu(options);
         }
+        ("run", Some(options)) => exec_command_run(options),
         ("", _) => println!("{}", app_matches.usage.unwrap()),
         (command @ _, _) => panic!("Command {} not implemented!", command),
     }
 }
 
-fn run_command_cpu<'a>(options: &ArgMatches<'a>) {
+fn exec_command_cpu<'a>(options: &ArgMatches<'a>) {
     let debug_mode = options.is_present("debug");
     let break_on_entry = options.is_present("break");
 
@@ -45,6 +48,33 @@ fn run_command_cpu<'a>(options: &ArgMatches<'a>) {
             println!("Done");
         }
     }
+}
+
+fn exec_command_run<'a>(options: &ArgMatches<'a>) {
+    let debug = options.is_present("debug");
+    let break_mode = options.is_present("break");
+    let rom_format_str = options.value_of("format").expect("format is required");
+
+    let rom_format = match rom_format_str {
+        "ines" => RomFormat::iNes,
+        _ => panic!(format!("Unsupported rom format '{}'", rom_format_str)),
+    };
+
+    let filename = options
+        .value_of("file")
+        .expect("File parameter is required");
+
+    let cart_data = fs::read(filename).expect(&format!("Failed to read file {}", filename));
+
+    let mut cpu = Cpu::new(debug);
+
+    let cart_loader = get_cart_loader(rom_format).expect(&format!("Failed to resolve loader for rom format '{}'", rom_format_str));
+    cart_loader.load(&mut cpu, &cart_data).expect("Failed to load rom");
+
+    match break_mode {
+        true => run_debugger_mode(&mut cpu),
+        false => cpu.run(),
+    };
 }
 
 fn run_debugger_mode(cpu: &mut Cpu) {
@@ -97,7 +127,7 @@ fn get_cli_app<'a, 'b>() -> App<'a, 'b> {
         .version("0.1")
         .author("Eric L. <elauffenburger@gmail.com>")
         .about("An NES emulator")
-        .subcommand(
+        .subcommands(vec![
             SubCommand::with_name("cpu")
                 .about("Enters cpu-only emulation mode")
                 .args(&[
@@ -120,7 +150,28 @@ fn get_cli_app<'a, 'b>() -> App<'a, 'b> {
                         .value_name("PROGRAM")
                         .required_unless("file"),
                 ]),
-        )
+            SubCommand::with_name("run")
+                .about("Runs nes in full emulation mode")
+                .args(&[
+                    Arg::with_name("debug")
+                        .short("d")
+                        .long("debug")
+                        .takes_value(false),
+                    Arg::with_name("break")
+                        .short("b")
+                        .long("break")
+                        .takes_value(false),
+                    Arg::with_name("file")
+                        .short("f")
+                        .long("file")
+                        .value_name("FILE")
+                        .required(true),
+                    Arg::with_name("format")
+                        .long("format")
+                        .value_name("FORMAT")
+                        .default_value("ines"),
+                ]),
+        ])
 }
 
 #[cfg(test)]

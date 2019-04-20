@@ -8,7 +8,19 @@
             "label": "cargo test build",
             "command": "cargo",
             "args": [
-                "test", "--no-run"
+                "test",
+                "--no-run"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ]
+        },
+        {
+            "type": "shell",
+            "label": "cargo build",
+            "command": "cargo",
+            "args": [
+                "build"
             ],
             "problemMatcher": [
                 "$rustc"

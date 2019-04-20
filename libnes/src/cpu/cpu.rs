@@ -89,6 +89,8 @@ impl Cpu {
     }
 
     pub fn startup(&mut self) {
+        self.registers.sp = 0xfd;
+
         self.reset();
     }
 
@@ -368,9 +370,9 @@ mod test {
 
         timeout_test(Box::new(move || {
             let mut cpu = Cpu::new(true);
-            load_program_vec_with_options(
+            load_program_bytes_with_options(
                 &mut cpu,
-                klaus_prog_vec,
+                &klaus_prog_vec,
                 LoadProgramOptions {
                     load_addr: 0x0000,
                     start_addr: 0x0400,

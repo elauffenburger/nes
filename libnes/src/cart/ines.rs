@@ -1,23 +1,29 @@
 use crate::bits::get_bit_val;
 use crate::cart::mappers::{get_mapper, Mapper, MapperOptions};
-use std::str;
 
 use crate::cart::CartLoader;
 use crate::cpu::Cpu;
-use crate::util::get_range;
+use crate::util::take_elems;
 
+const HEADER_SIZE: usize = 16;
 const TRAINER_SIZE: usize = 512;
-const PRG_ROM_UNIT_SIZE: usize = 16000;
-const CHR_ROM_UNIT_SIZE: usize = 8000;
+const PRG_ROM_UNIT_SIZE: usize = 16384;
+const CHR_ROM_UNIT_SIZE: usize = 8194;
 
 pub struct iNESLoader {}
+
+impl iNESLoader {
+    pub fn new() -> Self {
+        iNESLoader {}
+    }
+}
 
 impl CartLoader for iNESLoader {
     fn load(&self, cpu: &mut Cpu, cart_data: &[u8]) -> Result<(), String> {
         let header = read_header(cart_data)?;
 
         if header.has_trainer {
-            let trainer = get_range(cart_data, 16, TRAINER_SIZE)?;
+            let trainer = take_elems(cart_data, 16, TRAINER_SIZE)?;
 
             cpu.write_bytes_to(&0x7000.into(), trainer);
         }
@@ -27,15 +33,20 @@ impl CartLoader for iNESLoader {
             false => 0,
         };
 
-        let prg_rom =
-            &cart_data[rom_addr_offset..(header.num_prg_rom_banks as usize * PRG_ROM_UNIT_SIZE)];
+        let prg_rom_raw = &cart_data[(rom_addr_offset + HEADER_SIZE)
+            ..(header.num_prg_rom_banks as usize * PRG_ROM_UNIT_SIZE)];
+
+        let prg_rom_padding = PRG_ROM_UNIT_SIZE - (prg_rom_raw.len() % PRG_ROM_UNIT_SIZE);
+
+        let mut prg_rom = prg_rom_raw.to_vec();
+        prg_rom.extend_from_slice(&vec![0u8; prg_rom_padding]);
 
         let mapper = get_mapper(header.mapper_id)?;
         mapper.map(
             cpu,
             MapperOptions {
                 cart_data: cart_data,
-                prg_rom: prg_rom,
+                prg_rom: &prg_rom,
             },
         )?;
 
@@ -44,7 +55,7 @@ impl CartLoader for iNESLoader {
 }
 
 fn read_header(cart_data: &[u8]) -> Result<iNESHeader, String> {
-    match get_range(cart_data, 0, 3)? {
+    match take_elems(cart_data, 0, 4)? {
         &[0x4E, 0x45, 0x53, 0x1A] => {}
         id @ _ => {
             return Err(format!(
@@ -55,37 +66,32 @@ fn read_header(cart_data: &[u8]) -> Result<iNESHeader, String> {
         _ => return Err(format!("Unexpected non-ASCII sequence in header ID")),
     };
 
-    match get_range(cart_data, 3, 4)? {
-        &[0x1A] => {}
-        fmt @ _ => return Err(format!("Expected 0x1A at byte 3; received '{:x}'", fmt[0])),
-    };
-
-    let num_prg_rom_banks = match get_range(cart_data, 4, 1) {
+    let num_prg_rom_banks = match take_elems(cart_data, 4, 1) {
         Ok(num_banks) => num_banks[0],
         _ => return Err(format!("")),
     };
 
-    let num_chr_rom_banks = match get_range(cart_data, 5, 1) {
+    let num_chr_rom_banks = match take_elems(cart_data, 5, 1) {
         Ok(num_banks) => num_banks[0],
         _ => return Err(format!("")),
     };
 
-    let control_byte = match get_range(cart_data, 6, 1) {
+    let control_byte = match take_elems(cart_data, 6, 1) {
         Ok(byte) => byte[0],
         _ => return Err(format!("")),
     };
 
-    let control_byte_2 = match get_range(cart_data, 7, 1) {
+    let control_byte_2 = match take_elems(cart_data, 7, 1) {
         Ok(byte) => byte[0],
         _ => return Err(format!("")),
     };
 
-    let num_ram_banks = match get_range(cart_data, 8, 1) {
+    let num_ram_banks = match take_elems(cart_data, 8, 1) {
         Ok(num_banks) => num_banks[0],
         _ => return Err(format!("")),
     };
 
-    match get_range(cart_data, 9, 16) {
+    match take_elems(cart_data, 9, 7) {
         Ok(&[0, 0, 0, 0, 0, 0, 0]) => {}
         // TODO: how to handle this?
         data @ _ => {}
