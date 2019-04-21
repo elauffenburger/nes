@@ -262,10 +262,25 @@ pub fn iny(cpu: &mut Cpu, _addr_mode: AddressingMode) {
 }
 
 pub fn jmp(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    // TODO: handle 6502 jmp bug
-
     let operand = get_operand(cpu, &addr_mode);
-    let addr = operand.resolve_addr();
+    let addr = match addr_mode {
+        AddressingMode::Indirect => {
+            let raw_addr = cpu.next_u16();
+
+            // 6502 jmp bug (https://en.wikipedia.org/wiki/MOS_Technology_6502#Bugs_and_quirks)
+            match raw_addr & 0x00ff == 0x00ff {
+                false => operand.resolve_addr(),
+                true => {
+                    let actual_addr_lo = cpu.read_u8_at(&raw_addr.into());
+                    let actual_addr_hi = cpu.read_u8_at(&(raw_addr & 0xff00).into());
+                    let actual_addr = LittleEndian::read_u16(&[actual_addr_lo, actual_addr_hi]).into();
+
+                    cpu.read_u16_at(&actual_addr).into()
+                }
+            }
+        }
+        _ => operand.resolve_addr(),
+    };
 
     cpu.registers.pc = addr.into();
 }
