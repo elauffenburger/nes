@@ -1,8 +1,8 @@
 use itertools::*;
 
-use super::{Cpu, BRK_INTERRUPT_ADDR_START, RESET_INTERRUPT_ADDR_START};
+use super::mem::Address;
+use super::{Cpu, DefaultCpu, BRK_INTERRUPT_ADDR_START, RESET_INTERRUPT_ADDR_START};
 use crate::bits::{lsb, msb, to_bytes};
-use crate::mem::Address;
 
 const DEFAULT_LOAD_PROG_OPTS: LoadProgramOptions = LoadProgramOptions {
     start_addr: 0x0600,
@@ -10,29 +10,41 @@ const DEFAULT_LOAD_PROG_OPTS: LoadProgramOptions = LoadProgramOptions {
     debug: false,
 };
 
-pub fn load_program_bytes(cpu: &mut Cpu, prog: &[u8]) {
+pub fn load_program_bytes(cpu: &mut DefaultCpu, prog: &[u8]) {
     load_program_bytes_with_options(cpu, prog, DEFAULT_LOAD_PROG_OPTS);
 }
 
-pub fn load_program_bytes_with_options(cpu: &mut Cpu, prog: &[u8], opts: LoadProgramOptions) {
+pub fn load_program_bytes_with_options(
+    cpu: &mut DefaultCpu,
+    prog: &[u8],
+    opts: LoadProgramOptions,
+) {
     let prog_str: String = prog.iter().map(|b| format!("{:x}", b)).join(" ");
 
     load_program_str_with_options(cpu, prog_str.as_str(), opts)
 }
 
-pub fn load_program_string(cpu: &mut Cpu, prog: String) {
+pub fn load_program_string(cpu: &mut DefaultCpu, prog: String) {
     load_program_string_with_options(cpu, prog, DEFAULT_LOAD_PROG_OPTS)
 }
 
-pub fn load_program_string_with_options(cpu: &mut Cpu, prog: String, opts: LoadProgramOptions) {
+pub fn load_program_string_with_options(
+    cpu: &mut DefaultCpu,
+    prog: String,
+    opts: LoadProgramOptions,
+) {
     load_program_str_with_options(cpu, prog.as_str(), opts)
 }
 
-pub fn load_program_str<'a>(cpu: &mut Cpu, prog: &'a str) {
+pub fn load_program_str<'a>(cpu: &mut DefaultCpu, prog: &'a str) {
     load_program_str_with_options(cpu, prog, DEFAULT_LOAD_PROG_OPTS)
 }
 
-pub fn load_program_str_with_options<'a>(cpu: &mut Cpu, prog: &'a str, opts: LoadProgramOptions) {
+pub fn load_program_str_with_options<'a>(
+    cpu: &mut DefaultCpu,
+    prog: &'a str,
+    opts: LoadProgramOptions,
+) {
     if opts.debug {
         println!("Loading program at addr {:#06x}", opts.load_addr);
     }
@@ -54,7 +66,7 @@ pub fn load_program_str_with_options<'a>(cpu: &mut Cpu, prog: &'a str, opts: Loa
 
     // write stp instr to brk irq vector address (so that'll be run at the first brk)
     cpu.write_bytes_to(&Address::from(BRK_INTERRUPT_ADDR_START), &[0xef, 0xbe]);
-    cpu.write_bytes_to(&Address::from(0xbeef), &to_bytes("db"));
+    cpu.write_bytes_to(&Address::from(0xbeefu16), &to_bytes("db"));
 
     if opts.debug {
         println!("peeking load addr block:");
@@ -65,7 +77,7 @@ pub fn load_program_str_with_options<'a>(cpu: &mut Cpu, prog: &'a str, opts: Loa
     }
 }
 
-pub fn peek_mem(cpu: &mut Cpu, start_addr: u16) {
+pub fn peek_mem(cpu: &mut DefaultCpu, start_addr: u16) {
     print!("{:#06x}:\t", start_addr);
 
     for i in 0x00..0x0f {

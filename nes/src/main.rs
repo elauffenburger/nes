@@ -1,15 +1,15 @@
 extern crate clap;
 extern crate libnes;
 
+use std::fmt::Debug;
 use std::fs;
-use std::io::BufRead;
-use std::io::{self, Read, Write};
+use std::io::{self, Write, BufRead};
 
 use clap::{App, Arg, ArgMatches, SubCommand};
 
 use libnes::cart::{get_cart_loader, CartLoader, RomFormat};
 use libnes::cpu::helpers::load_program_str;
-use libnes::cpu::Cpu;
+use libnes::cpu::{Cpu, DefaultCpu};
 
 fn main() {
     let app = get_cli_app();
@@ -29,10 +29,10 @@ fn exec_command_cpu<'a>(options: &ArgMatches<'a>) {
     let debug_mode = options.is_present("debug");
     let break_on_entry = options.is_present("break");
 
-    let mut cpu = Cpu::new(debug_mode);
+    let mut cpu = DefaultCpu::new(debug_mode);
 
     match options.value_of("file") {
-        Some(file) => panic!("file input not implemented!"),
+        Some(_) => panic!("file input not implemented!"),
         None => {
             let program = options
                 .value_of("program")
@@ -40,7 +40,7 @@ fn exec_command_cpu<'a>(options: &ArgMatches<'a>) {
 
             load_program_str(&mut cpu, program);
 
-            cpu.startup();
+            cpu.start();
 
             match break_on_entry {
                 true => start_debugger(&mut cpu),
@@ -69,7 +69,7 @@ fn exec_command_run<'a>(options: &ArgMatches<'a>) {
 
     let cart_data = fs::read(filename).expect(&format!("Failed to read file {}", filename));
 
-    let mut cpu = Cpu::new(debug);
+    let mut cpu = DefaultCpu::new(debug);
 
     let cart_loader = get_cart_loader(rom_format).expect(&format!(
         "Failed to resolve loader for rom format '{}'",
@@ -79,8 +79,8 @@ fn exec_command_run<'a>(options: &ArgMatches<'a>) {
     cart_loader
         .load(&mut cpu, &cart_data)
         .expect("Failed to load rom");
-    
-    cpu.startup();
+
+    cpu.start();
 
     if let Some(addr) = start_addr {
         cpu.registers.pc = u16::from_str_radix(addr, 16).expect(&format!(
@@ -95,7 +95,10 @@ fn exec_command_run<'a>(options: &ArgMatches<'a>) {
     };
 }
 
-fn start_debugger(cpu: &mut Cpu) {
+fn start_debugger<'a, T>(cpu: &'a mut T)
+where
+    T: Cpu + Debug,
+{
     println!("Starting debugger...");
 
     let mut always_print_status = false;

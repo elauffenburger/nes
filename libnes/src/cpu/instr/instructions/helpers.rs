@@ -1,7 +1,7 @@
-use crate::cpu::registers::ProcStatusFlags;
 use crate::cpu::instr::addressing::AddressingMode;
+use crate::cpu::mem::Address;
+use crate::cpu::registers::ProcStatusFlags;
 use crate::cpu::Cpu;
-use crate::mem::Address;
 
 #[derive(Debug)]
 pub enum GetOperandResult {
@@ -40,24 +40,24 @@ pub fn get_operand(cpu: &mut Cpu, addr_mode: &AddressingMode) -> GetOperandResul
         AddressingMode::ZeroPageX => {
             let base_addr: Address = cpu.next_u8().into();
 
-            (&base_addr + cpu.registers.x).into()
+            (&base_addr + cpu.get_registers_mut().x).into()
         }
         AddressingMode::ZeroPageY => {
             let base_addr: Address = cpu.next_u8().into();
 
-            (&base_addr + cpu.registers.y).into()
+            (&base_addr + cpu.get_registers_mut().y).into()
         }
         AddressingMode::Relative => GetOperandResult::Value(cpu.next_u8() as i8),
         AddressingMode::Absolute => GetOperandResult::Address(cpu.next_u16().into()),
         AddressingMode::AbsoluteX => {
             let base_addr: Address = cpu.next_u16().into();
 
-            (&base_addr + cpu.registers.x).into()
+            (&base_addr + cpu.get_registers_mut().x).into()
         }
         AddressingMode::AbsoluteY => {
             let base_addr: Address = cpu.next_u16().into();
 
-            (&base_addr + cpu.registers.y).into()
+            (&base_addr + cpu.get_registers_mut().y).into()
         }
         AddressingMode::Indirect => {
             let addr = cpu.next_u16();
@@ -73,7 +73,7 @@ pub fn get_operand(cpu: &mut Cpu, addr_mode: &AddressingMode) -> GetOperandResul
             // 2074: 55 __
 
             // X + $20 = $24
-            let indir_addr = (cpu.registers.x as u8 + operand).into();
+            let indir_addr = (cpu.get_registers_mut().x as u8 + operand).into();
 
             // A <- **($24)
             let addr = cpu.read_u16_at(&indir_addr).into();
@@ -94,7 +94,7 @@ pub fn get_operand(cpu: &mut Cpu, addr_mode: &AddressingMode) -> GetOperandResul
             let operand_addr = cpu.read_u16_at(&operand.into());
 
             // A <- *($4038)
-            let indir_addr = (cpu.registers.y as u16 + operand_addr).into();
+            let indir_addr = (cpu.get_registers_mut().y as u16 + operand_addr).into();
 
             // A <- $23
             GetOperandResult::Value(cpu.read_u8_at(&indir_addr) as i8)
@@ -110,6 +110,6 @@ pub fn flags_from_compare(cpu_status: ProcStatusFlags, left: i8, right: i8) -> P
         decimal_mode: cpu_status.decimal_mode,
         break_command: cpu_status.break_command,
         overflow: cpu_status.overflow,
-        negative: (left - right) < 0
+        negative: (left - right) < 0,
     }
 }

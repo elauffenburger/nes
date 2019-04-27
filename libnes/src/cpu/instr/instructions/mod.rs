@@ -1,37 +1,40 @@
-mod instrs;
 mod helpers;
+mod instrs;
 pub use instrs::*;
 
 use crate::cpu::instr::addressing::AddressingMode;
 use crate::cpu::Cpu;
 
-pub struct CpuInstruction<'op, 'cpu> {
+pub struct CpuInstruction<'op, 'cpu, T>
+where
+    T: Cpu,
+{
     pub opcode: u8,
     pub instr: &'op str,
     pub addr_mode: AddressingMode,
-    cpu: &'cpu mut Cpu,
-    do_run: &'op Fn(&mut Cpu, AddressingMode),
+    cpu: &'cpu mut T,
+    do_run: &'op Fn(&'cpu mut T, AddressingMode),
 }
 
-impl<'op, 'cpu> CpuInstruction<'op, 'cpu> {
-    pub fn run(self) {
-        (self.do_run)(self.cpu, self.addr_mode)
-    }
-}
-
-impl<'op, 'cpu> std::fmt::Debug for CpuInstruction<'op, 'cpu> {
+impl<'op, 'cpu, T> std::fmt::Debug for CpuInstruction<'op, 'cpu, T>
+where
+    T: Cpu,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         write!(f, "{} ({:#04x})", self.instr, self.opcode)
     }
 }
 
-impl<'op, 'cpu> CpuInstruction<'op, 'cpu> {
+impl<'op, 'cpu, T> CpuInstruction<'op, 'cpu, T>
+where
+    T: Cpu,
+{
     pub fn new(
         opcode: u8,
-        cpu: &'cpu mut Cpu,
+        cpu: &'cpu mut T,
         instr: &'static str,
         addr_mode: AddressingMode,
-        do_run: &'op Fn(&mut Cpu, AddressingMode),
+        do_run: &'op Fn(&'cpu mut T, AddressingMode),
     ) -> Self {
         CpuInstruction {
             opcode: opcode,
@@ -42,7 +45,11 @@ impl<'op, 'cpu> CpuInstruction<'op, 'cpu> {
         }
     }
 
-    pub fn from(opcode: u8, cpu: &'cpu mut Cpu) -> Self {
+    pub fn run(self) {
+        (self.do_run)(self.cpu, self.addr_mode)
+    }
+
+    pub fn from(opcode: u8, cpu: &'cpu mut T) -> Self {
         match opcode {
             0x69 => CpuInstruction::new(opcode, cpu, "adc", AddressingMode::Immediate, &adc),
             0x65 => CpuInstruction::new(opcode, cpu, "adc", AddressingMode::ZeroPage, &adc),

@@ -2,23 +2,27 @@ use byteorder::{ByteOrder, LittleEndian};
 
 use super::helpers::*;
 use crate::bits::{get_bit_val, lsb, msb, rotate, set_bit_val, RotateDirection};
+use crate::cpu::cpu::Cpu;
 use crate::cpu::instr::addressing::AddressingMode;
-use crate::cpu::Cpu;
 
-pub fn adc(cpu: &mut Cpu, addr_mode: AddressingMode) {
+const BRK_INTERRUPT_VECTOR: u16 = 0xffe6;
+
+pub fn adc(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    let carry_value = match cpu.registers.p.carry {
+    let registers = cpu.get_registers_mut();
+
+    let carry_value = match registers.p.carry {
         true => 1,
         false => 0,
     };
 
     let to_add = value - carry_value;
-    let old_acc = cpu.registers.acc;
+    let old_acc = registers.acc;
 
     // overlowing_add actually checks if the value was CARRIED, not if there was a 2's complement overflow
-    let (new_acc, did_carry) = (cpu.registers.acc as u8).overflowing_add(to_add as u8);
+    let (new_acc, did_carry) = (registers.acc as u8).overflowing_add(to_add as u8);
 
     let did_overflow = {
         let extended_acc = old_acc as i16;
@@ -29,31 +33,35 @@ pub fn adc(cpu: &mut Cpu, addr_mode: AddressingMode) {
         extended_result < -128 || extended_result > 127
     };
 
-    cpu.registers.acc = new_acc as i8;
+    registers.acc = new_acc as i8;
 
-    cpu.registers.p.carry = did_carry;
-    cpu.registers.p.zero = new_acc == 0;
-    cpu.registers.p.overflow = did_overflow;
-    cpu.registers.p.negative = get_bit_val(new_acc as u8, 7);
+    registers.p.carry = did_carry;
+    registers.p.zero = new_acc == 0;
+    registers.p.overflow = did_overflow;
+    registers.p.negative = get_bit_val(new_acc as u8, 7);
 }
 
-pub fn and(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn and(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    cpu.registers.acc &= value;
+    let registers = cpu.get_registers_mut();
 
-    set_zn_flags_from_result(cpu, cpu.registers.acc as u8);
+    let new_acc = registers.acc & value;
+    registers.acc = new_acc;
+
+    set_zn_flags_from_result(cpu, new_acc as u8);
 }
 
-pub fn asl(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn asl(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let (old_value, new_value) = match addr_mode {
         AddressingMode::Acc => {
-            let old_value = cpu.registers.acc as u8;
+            let registers = cpu.get_registers_mut();
+            let old_value = registers.acc as u8;
 
-            cpu.registers.acc <<= 1;
+            registers.acc = registers.acc << 1;
 
-            (old_value, cpu.registers.acc as u8)
+            (old_value, registers.acc as u8)
         }
         _ => {
             let operand = get_operand(cpu, &addr_mode);
@@ -68,144 +76,179 @@ pub fn asl(cpu: &mut Cpu, addr_mode: AddressingMode) {
         }
     };
 
-    cpu.registers.p.carry = get_bit_val(old_value as u8, 7);
-    cpu.registers.p.zero = cpu.registers.acc == 0;
-    cpu.registers.p.negative = get_bit_val(new_value, 7);
+    let registers = cpu.get_registers_mut();
+
+    registers.p.carry = get_bit_val(old_value as u8, 7);
+    registers.p.zero = registers.acc == 0;
+    registers.p.negative = get_bit_val(new_value, 7);
 }
 
-pub fn bcc(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn bcc(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    if !cpu.registers.p.carry {
-        cpu.registers.pc = apply_branch_offset(cpu.registers.pc, value);
+    let registers = cpu.get_registers_mut();
+
+    if !registers.p.carry {
+        registers.pc = apply_branch_offset(registers.pc, value);
     }
 }
 
-pub fn bcs(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn bcs(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    if cpu.registers.p.carry {
-        cpu.registers.pc = apply_branch_offset(cpu.registers.pc, value);
+    let registers = cpu.get_registers_mut();
+
+    if registers.p.carry {
+        registers.pc = apply_branch_offset(registers.pc, value);
     }
 }
 
-pub fn beq(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn beq(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    if cpu.registers.p.zero {
-        cpu.registers.pc = apply_branch_offset(cpu.registers.pc, value);
+    let registers = cpu.get_registers_mut();
+
+    if registers.p.zero {
+        registers.pc = apply_branch_offset(registers.pc, value);
     }
 }
 
-pub fn bit(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn bit(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    let result = cpu.registers.acc & value;
+    let registers = cpu.get_registers_mut();
 
-    cpu.registers.p.zero = result == 0;
-    cpu.registers.p.overflow = get_bit_val(value as u8, 6);
-    cpu.registers.p.negative = get_bit_val(value as u8, 7);
+    let result = registers.acc & value;
+
+    registers.p.zero = result == 0;
+    registers.p.overflow = get_bit_val(value as u8, 6);
+    registers.p.negative = get_bit_val(value as u8, 7);
 }
 
-pub fn bmi(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn bmi(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let offset = operand.resolve_value(cpu);
 
-    if cpu.registers.p.negative {
-        cpu.registers.pc = apply_branch_offset(cpu.registers.pc, offset);
+    let registers = cpu.get_registers_mut();
+
+    if registers.p.negative {
+        registers.pc = apply_branch_offset(registers.pc, offset);
     }
 }
 
-pub fn bne(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn bne(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu) as i8;
 
-    if !cpu.registers.p.zero {
-        cpu.registers.pc = apply_branch_offset(cpu.registers.pc, value);
+    let registers = cpu.get_registers_mut();
+
+    if !registers.p.zero {
+        registers.pc = apply_branch_offset(registers.pc, value);
     }
 }
 
-pub fn bpl(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn bpl(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let offset = operand.resolve_value(cpu);
 
-    if !cpu.registers.p.zero {
-        cpu.registers.pc = apply_branch_offset(cpu.registers.pc, offset);
+    let registers = cpu.get_registers_mut();
+
+    if !registers.p.zero {
+        registers.pc = apply_branch_offset(registers.pc, offset);
     }
 }
 
-pub fn brk(cpu: &mut Cpu, _: AddressingMode) {
-    cpu.push_u16(cpu.registers.pc);
-    cpu.push(cpu.registers.p.clone().into());
+pub fn brk(cpu: &mut impl Cpu, _: AddressingMode) {
+    let (old_pc, old_p) = {
+        let registers = cpu.get_registers_mut();
 
-    cpu.registers.p.interrupt_disable = true;
-    cpu.registers.pc = cpu.read_u16_at(&(0xffe6.into()));
+        (registers.pc.clone(), registers.p.clone())
+    };
+
+    cpu.push_u16(old_pc);
+    cpu.push(old_p.into());
+
+    let new_pc = cpu.read_u16_at(&(BRK_INTERRUPT_VECTOR.into()));
+
+    let registers = cpu.get_registers_mut();
+    registers.p.interrupt_disable = true;
+    registers.pc = new_pc;
 }
 
-pub fn bvc(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn bvc(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let offset = operand.resolve_value(cpu);
 
-    if !cpu.registers.p.negative {
-        cpu.registers.pc = apply_branch_offset(cpu.registers.pc, offset);
+    let registers = cpu.get_registers_mut();
+
+    if !registers.p.negative {
+        registers.pc = apply_branch_offset(registers.pc, offset);
     }
 }
 
-pub fn bvs(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn bvs(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let offset = operand.resolve_value(cpu);
 
-    if cpu.registers.p.overflow {
-        cpu.registers.pc = apply_branch_offset(cpu.registers.pc, offset);
+    let registers = cpu.get_registers_mut();
+
+    if registers.p.overflow {
+        registers.pc = apply_branch_offset(registers.pc, offset);
     }
 }
 
-pub fn clc(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.p.carry = false;
+pub fn clc(cpu: &mut impl Cpu, _addr_mode: AddressingMode) {
+    cpu.get_registers_mut().p.carry = false;
 }
 
-pub fn cld(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.p.decimal_mode = false;
+pub fn cld(cpu: &mut impl Cpu, _addr_mode: AddressingMode) {
+    cpu.get_registers_mut().p.decimal_mode = false;
 }
 
-pub fn cli(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.p.interrupt_disable = false;
+pub fn cli(cpu: &mut impl Cpu, _addr_mode: AddressingMode) {
+    cpu.get_registers_mut().p.interrupt_disable = false;
 }
 
-pub fn clv(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.p.overflow = false;
+pub fn clv(cpu: &mut impl Cpu, _addr_mode: AddressingMode) {
+    cpu.get_registers_mut().p.overflow = false;
 }
 
-pub fn cmp(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn cmp(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu) as i8;
 
-    let result = cpu.registers.acc - value;
+    let registers = cpu.get_registers_mut();
 
-    cpu.registers.p.carry = cpu.registers.acc >= value;
-    cpu.registers.p.zero = cpu.registers.acc == value;
-    cpu.registers.p.negative = get_bit_val(result as u8, 7);
+    let result = registers.acc - value;
+
+    registers.p.carry = registers.acc >= value;
+    registers.p.zero = registers.acc == value;
+    registers.p.negative = get_bit_val(result as u8, 7);
 }
 
-pub fn cpx(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn cpx(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    cpu.registers.p = flags_from_compare(cpu.registers.p.clone(), cpu.registers.x as i8, value);
+    let registers = cpu.get_registers_mut();
+
+    registers.p = flags_from_compare(registers.p.clone(), registers.x as i8, value);
 }
 
-pub fn cpy(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn cpy(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    cpu.registers.p = flags_from_compare(cpu.registers.p.clone(), cpu.registers.y as i8, value);
+    let registers = cpu.get_registers_mut();
+
+    registers.p = flags_from_compare(registers.p.clone(), registers.y as i8, value);
 }
 
-pub fn dec(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn dec(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let addr = operand.resolve_addr();
 
@@ -213,32 +256,43 @@ pub fn dec(cpu: &mut Cpu, addr_mode: AddressingMode) {
 
     cpu.write_bytes_to(&addr, &[result]);
 
-    cpu.registers.p.zero = result == 0;
-    cpu.registers.p.negative = get_bit_val(result as u8, 7);
+    let registers = cpu.get_registers_mut();
+
+    registers.p.zero = result == 0;
+    registers.p.negative = get_bit_val(result as u8, 7);
 }
 
-pub fn dex(cpu: &mut Cpu, _: AddressingMode) {
-    cpu.registers.x = cpu.registers.x.overflowing_sub(1).0;
+pub fn dex(cpu: &mut impl Cpu, _: AddressingMode) {
+    let registers = cpu.get_registers_mut();
 
-    set_zn_flags_from_result(cpu, cpu.registers.x);
+    let new_x = registers.x.overflowing_sub(1).0;
+    registers.x = new_x;
+
+    set_zn_flags_from_result(cpu, new_x);
 }
 
-pub fn dey(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.y = cpu.registers.y.overflowing_sub(1).0;
+pub fn dey(cpu: &mut impl Cpu, _addr_mode: AddressingMode) {
+    let registers = cpu.get_registers_mut();
 
-    set_zn_flags_from_result(cpu, cpu.registers.y);
+    let new_y = registers.y.overflowing_sub(1).0;
+    registers.y = new_y;
+
+    set_zn_flags_from_result(cpu, new_y);
 }
 
-pub fn eor(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn eor(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    cpu.registers.acc ^= value;
+    let registers = cpu.get_registers_mut();
 
-    set_zn_flags_from_result(cpu, cpu.registers.acc as u8);
+    let new_acc = registers.acc ^ value;
+    registers.acc = new_acc;
+
+    set_zn_flags_from_result(cpu, new_acc as u8);
 }
 
-pub fn inc(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn inc(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let addr = operand.resolve_addr();
 
@@ -249,19 +303,25 @@ pub fn inc(cpu: &mut Cpu, addr_mode: AddressingMode) {
     set_zn_flags_from_result(cpu, result);
 }
 
-pub fn inx(cpu: &mut Cpu, _: AddressingMode) {
-    cpu.registers.x = cpu.registers.x.overflowing_add(1).0;
+pub fn inx(cpu: &mut impl Cpu, _: AddressingMode) {
+    let registers = cpu.get_registers_mut();
 
-    set_zn_flags_from_result(cpu, cpu.registers.x);
+    let new_x = registers.x.overflowing_add(1).0;
+    registers.x = new_x;
+
+    set_zn_flags_from_result(cpu, new_x);
 }
 
-pub fn iny(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.y = cpu.registers.y.overflowing_add(1).0;
+pub fn iny(cpu: &mut impl Cpu, _addr_mode: AddressingMode) {
+    let registers = cpu.get_registers_mut();
 
-    set_zn_flags_from_result(cpu, cpu.registers.y);
+    let new_y = registers.y.overflowing_add(1).0;
+    registers.y = new_y;
+
+    set_zn_flags_from_result(cpu, new_y);
 }
 
-pub fn jmp(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn jmp(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let addr = match addr_mode {
         AddressingMode::Indirect => {
@@ -273,7 +333,8 @@ pub fn jmp(cpu: &mut Cpu, addr_mode: AddressingMode) {
                 true => {
                     let actual_addr_lo = cpu.read_u8_at(&raw_addr.into());
                     let actual_addr_hi = cpu.read_u8_at(&(raw_addr & 0xff00).into());
-                    let actual_addr = LittleEndian::read_u16(&[actual_addr_lo, actual_addr_hi]).into();
+                    let actual_addr =
+                        LittleEndian::read_u16(&[actual_addr_lo, actual_addr_hi]).into();
 
                     cpu.read_u16_at(&actual_addr).into()
                 }
@@ -282,56 +343,63 @@ pub fn jmp(cpu: &mut Cpu, addr_mode: AddressingMode) {
         _ => operand.resolve_addr(),
     };
 
-    cpu.registers.pc = addr.into();
+    cpu.get_registers_mut().pc = addr.into();
 }
 
-pub fn jsr(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    let return_addr = cpu.registers.pc + 2;
+pub fn jsr(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
+    let return_addr = {
+        let registers = cpu.get_registers_mut();
+
+        registers.pc + 2
+    };
 
     let operand = get_operand(cpu, &addr_mode);
     let addr = operand.resolve_addr();
 
     cpu.push_bytes(&[msb(return_addr), lsb(return_addr)]);
 
-    cpu.registers.pc = addr.into();
+    let registers = cpu.get_registers_mut();
+    registers.pc = addr.into();
 }
 
-pub fn lda(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn lda(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    cpu.registers.acc = value;
+    cpu.get_registers_mut().acc = value;
 
-    set_zn_flags_from_result(cpu, cpu.registers.acc as u8);
+    set_zn_flags_from_result(cpu, value as u8);
 }
 
-pub fn ldx(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn ldx(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
-    let value = operand.resolve_value(cpu);
+    let value = operand.resolve_value(cpu) as u8;
 
-    cpu.registers.x = value as u8;
+    cpu.get_registers_mut().x = value;
 
-    set_zn_flags_from_result(cpu, cpu.registers.x);
+    set_zn_flags_from_result(cpu, value);
 }
 
-pub fn ldy(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn ldy(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
-    let value = operand.resolve_value(cpu);
+    let value = operand.resolve_value(cpu) as u8;
 
-    cpu.registers.y = value as u8;
+    cpu.get_registers_mut().y = value;
 
-    set_zn_flags_from_result(cpu, cpu.registers.y);
+    set_zn_flags_from_result(cpu, value);
 }
 
-pub fn lsr(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn lsr(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
 
     let (new_carry_flag, result) = match addr_mode {
         AddressingMode::Acc => {
-            let old_bit_0 = get_bit_val(cpu.registers.acc as u8, 0);
-            let value = set_bit_val((cpu.registers.acc as u8) >> 1, 7, false);
+            let registers = cpu.get_registers_mut();
 
-            cpu.registers.acc = value as i8;
+            let old_bit_0 = get_bit_val(registers.acc as u8, 0);
+            let value = set_bit_val((registers.acc as u8) >> 1, 7, false);
+
+            registers.acc = value as i8;
 
             (old_bit_0, value)
         }
@@ -348,55 +416,67 @@ pub fn lsr(cpu: &mut Cpu, addr_mode: AddressingMode) {
         }
     };
 
-    cpu.registers.p.carry = new_carry_flag;
-    cpu.registers.p.zero = result == 0;
-    cpu.registers.p.negative = get_bit_val(result, 7);
+    let registers = cpu.get_registers_mut();
+
+    registers.p.carry = new_carry_flag;
+    registers.p.zero = result == 0;
+    registers.p.negative = get_bit_val(result, 7);
 }
 
-pub fn nop(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn nop(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     // do...nothing
 }
 
-pub fn ora(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn ora(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    cpu.registers.acc = cpu.registers.acc | value;
+    let registers = cpu.get_registers_mut();
 
-    cpu.registers.p.zero = cpu.registers.acc == 0;
-    cpu.registers.p.negative = get_bit_val(cpu.registers.acc as u8, 7);
+    registers.acc = registers.acc | value;
+
+    registers.p.zero = registers.acc == 0;
+    registers.p.negative = get_bit_val(registers.acc as u8, 7);
 }
 
-pub fn pha(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.push(cpu.registers.acc as u8);
+pub fn pha(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
+    let acc = cpu.get_registers_mut().acc;
+
+    cpu.push(acc as u8);
 }
 
-pub fn php(cpu: &mut Cpu, addr_mode: AddressingMode) {
-    cpu.push(cpu.registers.p.clone().into());
+pub fn php(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
+    let p = cpu.get_registers_mut().p.clone();
+
+    cpu.push(p.into());
 }
 
-pub fn pla(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn pla(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let value = cpu.pop();
 
-    cpu.registers.acc = value as i8;
+    let registers = cpu.get_registers_mut();
 
-    cpu.registers.p.zero = cpu.registers.acc == 0;
-    cpu.registers.p.negative = get_bit_val(cpu.registers.acc as u8, 7);
+    registers.acc = value as i8;
+
+    registers.p.zero = registers.acc == 0;
+    registers.p.negative = get_bit_val(registers.acc as u8, 7);
 }
 
-pub fn plp(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn plp(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let value = cpu.pop();
 
-    cpu.registers.p = value.into();
+    cpu.get_registers_mut().p = value.into();
 }
 
-pub fn rol(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn rol(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let new_carry_flag = match &addr_mode {
         &AddressingMode::Acc => {
-            let (new_value, old_bit_7) = rotate(cpu.registers.acc as u8, RotateDirection::Left);
+            let registers = cpu.get_registers_mut();
+
+            let (new_value, old_bit_7) = rotate(registers.acc as u8, RotateDirection::Left);
 
             // acc <- acc shifted one bit with bit 0 set to the old carry flag
-            cpu.registers.acc = set_bit_val(new_value, 0, cpu.registers.p.carry) as i8;
+            registers.acc = set_bit_val(new_value, 0, registers.p.carry) as i8;
 
             old_bit_7
         }
@@ -404,25 +484,30 @@ pub fn rol(cpu: &mut Cpu, addr_mode: AddressingMode) {
             let operand = get_operand(cpu, &addr_mode);
             let addr = operand.resolve_addr();
             let value = operand.resolve_value(cpu) as u8;
+
+            let registers = cpu.get_registers_mut();
 
             let (new_value, old_bit_7) = rotate(value, RotateDirection::Left);
+            let carry = registers.p.carry;
 
-            cpu.write_bytes_to(&addr, &[set_bit_val(new_value, 0, cpu.registers.p.carry)]);
+            cpu.write_bytes_to(&addr, &[set_bit_val(new_value, 0, carry)]);
 
             old_bit_7
         }
     };
 
-    cpu.registers.p.carry = new_carry_flag;
+    let registers = cpu.get_registers_mut();
+    registers.p.carry = new_carry_flag;
 }
 
-pub fn ror(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn ror(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let new_carry_flag = match &addr_mode {
         &AddressingMode::Acc => {
-            let (new_value, old_bit_0) = rotate(cpu.registers.acc as u8, RotateDirection::Right);
+            let registers = cpu.get_registers_mut();
+            let (new_value, old_bit_0) = rotate(registers.acc as u8, RotateDirection::Right);
 
             // acc <- acc shifted one bit with bit 7 set to the old carry flag
-            cpu.registers.acc = set_bit_val(new_value, 7, cpu.registers.p.carry) as i8;
+            registers.acc = set_bit_val(new_value, 7, registers.p.carry) as i8;
 
             old_bit_0
         }
@@ -431,45 +516,55 @@ pub fn ror(cpu: &mut Cpu, addr_mode: AddressingMode) {
             let addr = operand.resolve_addr();
             let value = operand.resolve_value(cpu) as u8;
 
-            let (new_value, old_bit_0) = rotate(value, RotateDirection::Right);
+            let registers = cpu.get_registers_mut();
 
-            cpu.write_bytes_to(&addr, &[set_bit_val(new_value, 7, cpu.registers.p.carry)]);
+            let (new_value, old_bit_0) = rotate(value, RotateDirection::Right);
+            let carry = registers.p.carry;
+
+            cpu.write_bytes_to(&addr, &[set_bit_val(new_value, 7, carry)]);
 
             old_bit_0
         }
     };
 
-    cpu.registers.p.carry = new_carry_flag;
+    let registers = cpu.get_registers_mut();
+    registers.p.carry = new_carry_flag;
 }
 
-pub fn rti(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.p = cpu.pop().clone().into();
-    cpu.registers.pc = cpu.pop_u16().clone();
+pub fn rti(cpu: &mut impl Cpu, _addr_mode: AddressingMode) {
+    let (new_p, new_pc) = (cpu.pop().clone().into(), cpu.pop_u16().clone());
+
+    let registers = cpu.get_registers_mut();
+
+    registers.p = new_p;
+    registers.pc = new_pc;
 }
 
-pub fn rts(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn rts(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let addr_lo = cpu.pop();
     let addr_hi = cpu.pop();
 
     let addr = LittleEndian::read_u16(&[addr_lo, addr_hi]);
 
-    cpu.registers.pc = addr;
+    cpu.get_registers_mut().pc = addr;
 }
 
-pub fn sbc(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn sbc(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let value = operand.resolve_value(cpu);
 
-    let not_of_carry_value = match cpu.registers.p.carry {
+    let registers = cpu.get_registers_mut();
+
+    let not_of_carry_value = match registers.p.carry {
         true => 0,
         false => 1,
     };
 
     let to_subtract = value - not_of_carry_value;
-    let old_acc = cpu.registers.acc;
+    let old_acc = registers.acc;
 
     // overlowing_add actually checks if the value was CARRIED, not if there was a 2's complement overflow
-    let (new_acc, did_carry) = (cpu.registers.acc as u8).overflowing_sub(to_subtract as u8);
+    let (new_acc, did_carry) = (registers.acc as u8).overflowing_sub(to_subtract as u8);
 
     let did_overflow = {
         let extended_acc = old_acc as i16;
@@ -480,83 +575,101 @@ pub fn sbc(cpu: &mut Cpu, addr_mode: AddressingMode) {
         extended_result < -128 || extended_result > 127
     };
 
-    cpu.registers.acc = new_acc as i8;
+    registers.acc = new_acc as i8;
 
-    cpu.registers.p.carry = did_carry;
-    cpu.registers.p.zero = new_acc == 0;
-    cpu.registers.p.overflow = did_overflow;
-    cpu.registers.p.negative = get_bit_val(new_acc as u8, 7);
+    registers.p.carry = did_carry;
+    registers.p.zero = new_acc == 0;
+    registers.p.overflow = did_overflow;
+    registers.p.negative = get_bit_val(new_acc as u8, 7);
 }
 
-pub fn sec(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.p.carry = true;
+pub fn sec(cpu: &mut impl Cpu, _addr_mode: AddressingMode) {
+    cpu.get_registers_mut().p.carry = true;
 }
 
-pub fn sed(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.p.decimal_mode = true;
+pub fn sed(cpu: &mut impl Cpu, _addr_mode: AddressingMode) {
+    cpu.get_registers_mut().p.decimal_mode = true;
 }
 
-pub fn sei(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.p.interrupt_disable = true;
+pub fn sei(cpu: &mut impl Cpu, _addr_mode: AddressingMode) {
+    cpu.get_registers_mut().p.interrupt_disable = true;
 }
 
-pub fn sta(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn sta(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let operand_addr = operand.resolve_addr();
 
-    cpu.write_bytes_to(&operand_addr, &[cpu.registers.acc as u8]);
+    let acc = cpu.get_registers_mut().acc;
+    cpu.write_bytes_to(&operand_addr, &[acc as u8]);
 }
 
-pub fn stp(cpu: &mut Cpu, _: AddressingMode) {
+pub fn stp(cpu: &mut impl Cpu, _: AddressingMode) {
     cpu.stop();
 }
 
-pub fn stx(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn stx(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let addr = operand.resolve_addr();
 
-    cpu.write_bytes_to(&addr, &[cpu.registers.x as u8]);
+    let x = cpu.get_registers_mut().x;
+    cpu.write_bytes_to(&addr, &[x]);
 }
 
-pub fn sty(cpu: &mut Cpu, addr_mode: AddressingMode) {
+pub fn sty(cpu: &mut impl Cpu, addr_mode: AddressingMode) {
     let operand = get_operand(cpu, &addr_mode);
     let addr = operand.resolve_addr();
 
-    cpu.write_bytes_to(&addr, &[cpu.registers.y as u8]);
+    let y = cpu.get_registers_mut().y;
+    cpu.write_bytes_to(&addr, &[y]);
 }
 
-pub fn tax(cpu: &mut Cpu, _: AddressingMode) {
-    cpu.registers.x = cpu.registers.acc as u8;
+pub fn tax(cpu: &mut impl Cpu, _: AddressingMode) {
+    let registers = cpu.get_registers_mut();
 
-    set_zn_flags_from_result(cpu, cpu.registers.x);
+    let new_x = registers.acc as u8;
+    registers.x = new_x;
+
+    set_zn_flags_from_result(cpu, new_x);
 }
 
-pub fn tay(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.y = cpu.registers.acc as u8;
+pub fn tay(cpu: &mut impl Cpu, _addr_mode: AddressingMode) {
+    let registers = cpu.get_registers_mut();
 
-    set_zn_flags_from_result(cpu, cpu.registers.y);
+    let new_y = registers.acc as u8;
+    registers.y = new_y;
+
+    set_zn_flags_from_result(cpu, new_y);
 }
 
-pub fn tsx(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.x = cpu.registers.sp;
+pub fn tsx(cpu: &mut impl Cpu, _addr_mode: AddressingMode) {
+    let registers = cpu.get_registers_mut();
 
-    set_zn_flags_from_result(cpu, cpu.registers.x);
+    let new_x = registers.sp;
+    registers.x = new_x;
+
+    set_zn_flags_from_result(cpu, new_x);
 }
 
-pub fn txa(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.acc = cpu.registers.x as i8;
+pub fn txa(cpu: &mut impl Cpu, _addr_mode: AddressingMode) {
+    let registers = cpu.get_registers_mut();
 
-    set_zn_flags_from_result(cpu, cpu.registers.acc as u8);
+    let new_acc = registers.x as i8;
+    registers.acc = new_acc;
+
+    set_zn_flags_from_result(cpu, new_acc as u8);
 }
 
-pub fn txs(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.sp = cpu.registers.x;
+pub fn txs(cpu: &mut impl Cpu, _addr_mode: AddressingMode) {
+    cpu.get_registers_mut().sp = cpu.get_registers_mut().x;
 }
 
-pub fn tya(cpu: &mut Cpu, _addr_mode: AddressingMode) {
-    cpu.registers.acc = cpu.registers.y as i8;
+pub fn tya(cpu: &mut impl Cpu, _addr_mode: AddressingMode) {
+    let registers = cpu.get_registers_mut();
 
-    set_zn_flags_from_result(cpu, cpu.registers.acc as u8);
+    let new_acc = registers.y as i8;
+    registers.acc = new_acc;
+
+    set_zn_flags_from_result(cpu, new_acc as u8);
 }
 
 // helpers
@@ -565,7 +678,9 @@ fn apply_branch_offset(pc: u16, offset: i8) -> u16 {
     (pc as i32 + offset as i32) as u16
 }
 
-fn set_zn_flags_from_result(cpu: &mut Cpu, result: u8) {
-    cpu.registers.p.zero = result == 0;
-    cpu.registers.p.negative = get_bit_val(result, 7);
+fn set_zn_flags_from_result(cpu: &mut impl Cpu, result: u8) {
+    let registers = cpu.get_registers_mut();
+
+    registers.p.zero = result == 0;
+    registers.p.negative = get_bit_val(result, 7);
 }

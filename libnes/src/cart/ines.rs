@@ -18,14 +18,17 @@ impl iNESLoader {
     }
 }
 
-impl CartLoader for iNESLoader {
-    fn load(&self, cpu: &mut Cpu, cart_data: &[u8]) -> Result<(), String> {
+impl<T> CartLoader<T> for iNESLoader
+where
+    T: Cpu,
+{
+    fn load(&self, cpu: &mut T, cart_data: &[u8]) -> Result<(), String> {
         let header = read_header(cart_data)?;
 
         if header.has_trainer {
             let trainer = take_elems(cart_data, 16, TRAINER_SIZE)?;
 
-            cpu.write_bytes_to(&0x7000.into(), trainer);
+            cpu.write_bytes_to(&0x7000u16.into(), trainer);
         }
 
         let rom_addr_offset = match header.has_trainer {

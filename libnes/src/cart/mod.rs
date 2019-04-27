@@ -5,11 +5,17 @@ pub mod mappers;
 
 use ines::iNESLoader;
 
-pub trait CartLoader {
-    fn load(&self, cpu: &mut Cpu, cart_data: &[u8]) -> Result<(), String>;
+pub trait CartLoader<T>
+where
+    T: Cpu,
+{
+    fn load(&self, cpu: &mut T, cart_data: &[u8]) -> Result<(), String>;
 }
 
-pub fn get_cart_loader(format: RomFormat) -> Result<impl CartLoader, String> {
+pub fn get_cart_loader<T>(format: RomFormat) -> Result<impl CartLoader<T>, String>
+where
+    T: Cpu,
+{
     match format {
         RomFormat::iNes => Ok(iNESLoader::new()),
     }
