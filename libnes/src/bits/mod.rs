@@ -1,8 +1,14 @@
 pub fn get_bit_val(num: u8, bit_num: usize) -> bool {
     guard_bit_op(bit_num);
 
+    get_bit_val_u8(num, bit_num) == 1
+}
+
+pub fn get_bit_val_u8(num: u8, bit_num: usize) -> u8 {
+    guard_bit_op(bit_num);
+
     let left = 7 - bit_num;
-    (num << left) >> 7 == 1
+    (num << left) >> 7
 }
 
 pub fn set_bit_val(num: u8, bit_num: usize, val: bool) -> u8 {

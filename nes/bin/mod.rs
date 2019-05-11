@@ -1,15 +1,21 @@
 extern crate clap;
 extern crate libnes;
+extern crate gtk;
 
-use std::fmt::Debug;
+mod gui;
+mod debugger;
+pub mod util;
+
 use std::fs;
-use std::io::{self, Write, BufRead};
 
 use clap::{App, Arg, ArgMatches, SubCommand};
 
 use libnes::cart::{get_cart_loader, CartLoader, RomFormat};
 use libnes::cpu::helpers::load_program_str;
 use libnes::cpu::{Cpu, DefaultCpu};
+
+use debugger::start_debugger;
+use gui::start_gui;
 
 fn main() {
     let app = get_cli_app();
@@ -57,86 +63,48 @@ fn exec_command_run<'a>(options: &ArgMatches<'a>) {
     let break_mode = options.is_present("break");
     let rom_format_str = options.value_of("format").expect("format is required");
     let start_addr = options.value_of("startaddr");
+    let gui = options.is_present("gui");
 
     let rom_format = match rom_format_str {
         "ines" => RomFormat::iNes,
         _ => panic!(format!("Unsupported rom format '{}'", rom_format_str)),
     };
 
-    let filename = options
-        .value_of("file")
-        .expect("File parameter is required");
-
-    let cart_data = fs::read(filename).expect(&format!("Failed to read file {}", filename));
-
     let mut cpu = DefaultCpu::new(debug);
 
-    let cart_loader = get_cart_loader(rom_format).expect(&format!(
-        "Failed to resolve loader for rom format '{}'",
-        rom_format_str
-    ));
+    match gui {
+        false => {
+            let filename = options
+                .value_of("file")
+                .expect("File parameter is required");
 
-    cart_loader
-        .load(&mut cpu, &cart_data)
-        .expect("Failed to load rom");
+            let cart_data = fs::read(filename).expect(&format!("Failed to read file {}", filename));
 
-    cpu.start();
+            let cart_loader = get_cart_loader(rom_format).expect(&format!(
+                "Failed to resolve loader for rom format '{}'",
+                rom_format_str
+            ));
 
-    if let Some(addr) = start_addr {
-        cpu.registers.pc = u16::from_str_radix(addr, 16).expect(&format!(
-            "Failed to parse starting address '{}' as a hexadecimal u16 value",
-            addr
-        ));
+            cart_loader
+                .load(&mut cpu, &cart_data)
+                .expect("Failed to load rom");
+
+            cpu.start();
+
+            if let Some(addr) = start_addr {
+                cpu.registers.pc = u16::from_str_radix(addr, 16).expect(&format!(
+                    "Failed to parse starting address '{}' as a hexadecimal u16 value",
+                    addr
+                ));
+            }
+
+            match break_mode {
+                true => start_debugger(&mut cpu),
+                false => cpu.run(),
+            };
+        },
+        true => start_gui(&mut cpu)
     }
-
-    match break_mode {
-        true => start_debugger(&mut cpu),
-        false => cpu.run(),
-    };
-}
-
-fn start_debugger<'a, T>(cpu: &'a mut T)
-where
-    T: Cpu + Debug,
-{
-    println!("Starting debugger...");
-
-    let mut always_print_status = false;
-
-    while cpu.is_running() {
-        if always_print_status {
-            println!("{:?}", cpu);
-        }
-
-        print!("> ");
-        io::stdout().flush().ok();
-
-        let input = read_stdio_line();
-
-        match input.as_str() {
-            ".exit" => break,
-            "r" => cpu.run(),
-            "s" => cpu.step(),
-            "p" => println!("{:?}", cpu),
-            "p!" => always_print_status = !always_print_status,
-            "h" => print_debugger_mode_help(),
-            cmd @ _ => println!("Unrecognized command: {}\nEnter 'h' for help", cmd),
-        }
-    }
-}
-
-fn print_debugger_mode_help() {
-    println!("Debugger mode help:");
-    println!(".exit: exit debugging");
-    println!("r: run to completion");
-    println!("s: step");
-    println!("p: print cpu status");
-    println!("h: print help");
-    println!("");
-}
-
-fn read_stdio_line() -> String {
-    io::stdin().lock().lines().next().unwrap().unwrap()
 }
 
 fn get_cli_app<'a, 'b>() -> App<'a, 'b> {
@@ -182,7 +150,11 @@ fn get_cli_app<'a, 'b>() -> App<'a, 'b> {
                         .short("f")
                         .long("file")
                         .value_name("FILE")
-                        .required(true),
+                        .required_unless("gui"),
+                    Arg::with_name("gui")
+                        .short("g")
+                        .long("gui")
+                        .default_value("true"),
                     Arg::with_name("format")
                         .long("format")
                         .value_name("FORMAT")
@@ -192,10 +164,4 @@ fn get_cli_app<'a, 'b>() -> App<'a, 'b> {
                         .value_name("START_ADDRESS"),
                 ]),
         ])
-}
-
-#[cfg(test)]
-mod test {
-    #[test]
-    fn can_init() {}
 }
