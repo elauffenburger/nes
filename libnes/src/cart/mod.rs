@@ -1,20 +1,23 @@
-use crate::cpu::Cpu;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::nes::Nes;
 
 pub mod ines;
 pub mod mappers;
 
 use ines::iNESLoader;
 
-pub trait CartLoader<T>
+pub trait CartLoader<TNes>
 where
-    T: Cpu,
+    TNes: Nes,
 {
-    fn load(&self, cpu: &mut T, cart_data: &[u8]) -> Result<(), String>;
+    fn load(&self, nes: Rc<RefCell<TNes>>, cart_data: &[u8]) -> Result<(), String>;
 }
 
-pub fn get_cart_loader<T>(format: RomFormat) -> Result<impl CartLoader<T>, String>
+pub fn get_cart_loader<TNes>(format: RomFormat) -> Result<impl CartLoader<TNes>, String>
 where
-    T: Cpu,
+    TNes: Nes + 'static,
 {
     match format {
         RomFormat::iNes => Ok(iNESLoader::new()),

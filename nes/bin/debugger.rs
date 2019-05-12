@@ -1,14 +1,15 @@
-use std::fmt::Debug;
+use std::cell::RefCell;
 use std::io::{self, Write};
+use std::rc::Rc;
 
 use libnes::cpu::Cpu;
 
 use crate::util::read_stdio_line;
 
-pub fn start_debugger<'a, T>(cpu: &'a mut T)
-where
-    T: Cpu + Debug,
+pub fn start_debugger<'a>(cpu_ref: Rc<RefCell<Cpu>>)
 {
+    let mut cpu = cpu_ref.borrow_mut();
+
     println!("Starting debugger...");
 
     let mut always_print_status = false;

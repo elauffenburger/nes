@@ -10,14 +10,10 @@ path = "bin/mod.rs"
 
 [dependencies]
 clap = "2.33.0"
-gio = "0.6.0"
-
-[dependencies.gtk]
-version = "0.6.0"
-features = ["v3_16"]
-
-[dependencies.piston]
-version = "0.42.0"
+piston = "0.42.0"
+piston2d-graphics = "0.30.0"
+pistoncore-glutin_window = "0.54.0"
+piston2d-opengl_graphics = "0.59.0"
 
 [dependencies.libnes]
 path = "../libnes"

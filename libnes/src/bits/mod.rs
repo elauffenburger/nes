@@ -1,3 +1,5 @@
+use byteorder::{ByteOrder, LittleEndian};
+
 pub fn get_bit_val(num: u8, bit_num: usize) -> bool {
     guard_bit_op(bit_num);
 
@@ -18,6 +20,10 @@ pub fn set_bit_val(num: u8, bit_num: usize, val: bool) -> u8 {
         true => num | (1 << bit_num),
         false => num & !(1 << bit_num),
     }
+}
+
+pub fn u16_from_u8s(val_lo: u8, val_hi: u8) -> u16 {
+    LittleEndian::read_u16(&[val_lo, val_hi])
 }
 
 pub fn to_bytes<'a>(byte_str: &'a str) -> Vec<u8> {

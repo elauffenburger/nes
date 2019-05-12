@@ -1,5 +1,7 @@
 use std::ops::Add;
 
+const PPU_MEMORY_MAP_SIZE: u32 = 0x10000u32;
+
 #[derive(Debug, PartialEq)]
 pub enum Address {
     Address(u16),
@@ -115,7 +117,7 @@ pub trait PpuMemoryMap {
 }
 
 pub struct DefaultPpuMemoryMap {
-    memory: Box<[u8; 0x10000]>,
+    memory: Box<[u8; PPU_MEMORY_MAP_SIZE as usize]>,
 }
 
 impl PpuMemoryMap for DefaultPpuMemoryMap {
@@ -129,5 +131,13 @@ impl PpuMemoryMap for DefaultPpuMemoryMap {
         let effective_addr = addr.get_addr();
 
         self.memory[effective_addr as usize] = val;
+    }
+}
+
+impl DefaultPpuMemoryMap {
+    pub fn new() -> Self {
+        DefaultPpuMemoryMap {
+            memory: Box::from([0u8; PPU_MEMORY_MAP_SIZE as usize])
+        }
     }
 }

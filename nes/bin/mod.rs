@@ -1,18 +1,26 @@
 extern crate clap;
+extern crate glutin_window;
+extern crate graphics;
 extern crate libnes;
-extern crate gtk;
+extern crate opengl_graphics;
+extern crate piston;
 
-mod gui;
 mod debugger;
+mod gui;
 pub mod util;
 
+use std::cell::RefCell;
 use std::fs;
+use std::rc::Rc;
 
 use clap::{App, Arg, ArgMatches, SubCommand};
 
 use libnes::cart::{get_cart_loader, CartLoader, RomFormat};
 use libnes::cpu::helpers::load_program_str;
 use libnes::cpu::{Cpu, DefaultCpu};
+use libnes::nes::{DefaultNes, Nes};
+use libnes::ppu::{DefaultPpu, Ppu};
+use libnes::util::rc_ref;
 
 use debugger::start_debugger;
 use gui::start_gui;
@@ -49,7 +57,7 @@ fn exec_command_cpu<'a>(options: &ArgMatches<'a>) {
             cpu.start();
 
             match break_on_entry {
-                true => start_debugger(&mut cpu),
+                true => start_debugger(rc_ref(cpu)),
                 false => cpu.run(),
             };
 
@@ -63,47 +71,52 @@ fn exec_command_run<'a>(options: &ArgMatches<'a>) {
     let break_mode = options.is_present("break");
     let rom_format_str = options.value_of("format").expect("format is required");
     let start_addr = options.value_of("startaddr");
-    let gui = options.is_present("gui");
+    let gui = options.value_of("gui");
 
     let rom_format = match rom_format_str {
         "ines" => RomFormat::iNes,
         _ => panic!(format!("Unsupported rom format '{}'", rom_format_str)),
     };
 
-    let mut cpu = DefaultCpu::new(debug);
+    let cpu = rc_ref(DefaultCpu::new(debug));
+    let ppu = rc_ref(DefaultPpu::new());
+    let nes = rc_ref(DefaultNes::new(cpu, ppu));
+
+    let filename = options
+        .value_of("file")
+        .expect("File parameter is required");
+
+    let cart_data = fs::read(filename).expect(&format!("Failed to read file {}", filename));
+
+    let cart_loader = get_cart_loader(rom_format).expect(&format!(
+        "Failed to resolve loader for rom format '{}'",
+        rom_format_str
+    ));
+
+    cart_loader
+        .load(nes.clone(), &cart_data)
+        .expect("Failed to load rom");
+
+    let cpu: Rc<RefCell<Cpu>> = nes.clone().borrow_mut().get_cpu().clone();
+    cpu.borrow_mut().start();
+
+    if let Some(addr) = start_addr {
+        cpu.borrow_mut().get_registers_mut().pc = u16::from_str_radix(addr, 16).expect(&format!(
+            "Failed to parse starting address '{}' as a hexadecimal u16 value",
+            addr
+        ));
+    }
 
     match gui {
-        false => {
-            let filename = options
-                .value_of("file")
-                .expect("File parameter is required");
-
-            let cart_data = fs::read(filename).expect(&format!("Failed to read file {}", filename));
-
-            let cart_loader = get_cart_loader(rom_format).expect(&format!(
-                "Failed to resolve loader for rom format '{}'",
-                rom_format_str
-            ));
-
-            cart_loader
-                .load(&mut cpu, &cart_data)
-                .expect("Failed to load rom");
-
-            cpu.start();
-
-            if let Some(addr) = start_addr {
-                cpu.registers.pc = u16::from_str_radix(addr, 16).expect(&format!(
-                    "Failed to parse starting address '{}' as a hexadecimal u16 value",
-                    addr
-                ));
-            }
-
+        Some("false") => {
             match break_mode {
-                true => start_debugger(&mut cpu),
-                false => cpu.run(),
+                true => start_debugger(cpu),
+                false => cpu.borrow_mut().run(),
             };
-        },
-        true => start_gui(&mut cpu)
+        }
+        _ => {
+            start_gui(nes);
+        }
     }
 }
 

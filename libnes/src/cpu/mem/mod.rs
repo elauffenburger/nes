@@ -13,7 +13,9 @@ pub struct DefaultCpuMemoryMap {
 
 impl DefaultCpuMemoryMap {
     pub fn new() -> DefaultCpuMemoryMap {
-        DefaultCpuMemoryMap { memory: [0; 0xffff + 1]}
+        DefaultCpuMemoryMap {
+            memory: [0; 0xffff + 1],
+        }
     }
 }
 
@@ -21,12 +23,14 @@ impl CpuMemoryMap for DefaultCpuMemoryMap {
     fn get(&self, addr: &Address) -> u8 {
         let effective_addr = addr.get_addr();
 
+        // TODO: impl ppu hooks
         self.memory[effective_addr as usize]
     }
 
     fn set(&mut self, addr: &Address, val: u8) {
         let effective_addr = addr.get_addr();
 
+        // TODO: impl ppu hooks
         self.memory[effective_addr as usize] = val;
     }
 }

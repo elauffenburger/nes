@@ -8,7 +8,7 @@
             "name": "Debug Lib",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/target/debug/libnes-d2b0a2de808ea313.exe",
+            "program": "${workspaceFolder}/target/debug/libnes-14a6eb59586781c5.exe",
             "cwd": "${workspaceRoot}",
         },
         {
@@ -19,9 +19,27 @@
             "program": "${workspaceFolder}/target/debug/nes.exe",
             "args": [
                 "run",
+                "-g",
+                "false",
                 "--file",
                 "${workspaceFolder}/libnes/test/nes/nestest.nes",
-                "-d"
+                "-d",
+                "--start-addr",
+                "C000"
+            ],
+            "cwd": "${workspaceRoot}",
+        },
+        {
+            "name": "Debug NesTest (gui)",
+            "preLaunchTask": "cargo build",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/nes.exe",
+            "args": [
+                "run",
+                "--file",
+                "${workspaceFolder}/libnes/test/nes/nestest.nes",
+                "-d",
             ],
             "cwd": "${workspaceRoot}",
         }

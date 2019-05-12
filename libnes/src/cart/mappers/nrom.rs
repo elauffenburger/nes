@@ -1,5 +1,8 @@
+use std::rc::Rc;
+use std::cell::RefCell;
+
 use crate::cart::mappers::{Mapper, MapperOptions};
-use crate::cpu::Cpu;
+use crate::nes::Nes;
 
 pub struct NROMMapper {}
 
@@ -10,10 +13,15 @@ impl NROMMapper {
 }
 
 impl Mapper for NROMMapper {
-    fn map(&self, cpu: &mut Cpu, options: MapperOptions) -> Result<(), String> {
-        cpu.write_bytes_to(&0x8000u16.into(), &options.prg_rom);
+    fn map(&self, nes: Rc<RefCell<Nes>>, options: MapperOptions) -> Result<(), String> {
+        let cpu = nes.borrow_mut().get_cpu();
+
+        cpu.borrow_mut().write_bytes_to(&0x8000u16.into(), &options.prg_rom);
         // TODO: actually impl mirroring
-        cpu.write_bytes_to(&0xC000u16.into(), &options.prg_rom);
+        cpu.borrow_mut().write_bytes_to(&0xC000u16.into(), &options.prg_rom);
+
+        let ppu = nes.borrow_mut().get_ppu();
+        ppu.borrow_mut().write_bytes_to(&0x0000u16.into(), &options.chr_rom);
 
         Ok(())
     }

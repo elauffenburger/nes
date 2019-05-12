@@ -1,14 +1,17 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::bits::get_bit_val;
 use crate::cart::mappers::{get_mapper, Mapper, MapperOptions};
-
 use crate::cart::CartLoader;
 use crate::cpu::Cpu;
+use crate::nes::Nes;
 use crate::util::take_elems;
 
 const HEADER_SIZE: usize = 16;
 const TRAINER_SIZE: usize = 512;
 const PRG_ROM_UNIT_SIZE: usize = 16384;
-const CHR_ROM_UNIT_SIZE: usize = 8194;
+const CHR_ROM_UNIT_SIZE: usize = 8192;
 
 pub struct iNESLoader {}
 
@@ -20,15 +23,17 @@ impl iNESLoader {
 
 impl<T> CartLoader<T> for iNESLoader
 where
-    T: Cpu,
+    T: Nes + 'static,
 {
-    fn load(&self, cpu: &mut T, cart_data: &[u8]) -> Result<(), String> {
+    fn load(&self, nes_ref: Rc<RefCell<T>>, cart_data: &[u8]) -> Result<(), String> {
+        let cpu = nes_ref.borrow_mut().get_cpu();
+
         let header = read_header(cart_data)?;
 
         if header.has_trainer {
             let trainer = take_elems(cart_data, 16, TRAINER_SIZE)?;
 
-            cpu.write_bytes_to(&0x7000u16.into(), trainer);
+            cpu.borrow_mut().write_bytes_to(&0x7000u16.into(), trainer);
         }
 
         let rom_addr_offset = match header.has_trainer {
@@ -42,12 +47,19 @@ where
 
         let prg_rom = &cart_data[prg_rom_start_addr..prg_rom_end_addr];
 
+        let chr_rom_start_addr = prg_rom_end_addr;
+        let chr_rom_end_addr =
+            chr_rom_start_addr + (header.num_chr_rom_banks as usize * CHR_ROM_UNIT_SIZE);
+
+        let chr_rom = &cart_data[chr_rom_start_addr..chr_rom_end_addr];
+
         let mapper = get_mapper(header.mapper_id)?;
         mapper.map(
-            cpu,
+            nes_ref,
             MapperOptions {
-                cart_data: cart_data,
-                prg_rom: prg_rom,
+                cart_data,
+                prg_rom,
+                chr_rom,
             },
         )?;
 

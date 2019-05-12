@@ -1,5 +1,6 @@
-use super::NUM_TILES;
+use std::fmt::Debug;
 
+use super::NUM_TILES;
 use crate::bits::get_bit_val_u8;
 
 pub const TILE_PLANE_SIZE: usize = 0x08;
@@ -9,7 +10,7 @@ pub struct PatternTable(Box<[PatternTableTile; NUM_TILES as usize]>);
 
 impl PatternTable {
     pub fn new() -> Self {
-        let mut tiles = [PatternTableTile::default(); NUM_TILES as usize];
+        let tiles = [PatternTableTile::default(); NUM_TILES as usize];
 
         PatternTable(Box::from(tiles))
     }
@@ -36,6 +37,16 @@ impl PatternTable {
     }
 }
 
+impl Debug for PatternTable {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        for (i, tile) in self.0.iter().enumerate() {
+            write!(f, "tile {}:\n{:?}\n", i, tile)?;
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Default, Clone, Copy)]
 pub struct PatternTableTilePlane([u8; TILE_PLANE_SIZE]);
 
@@ -44,6 +55,17 @@ impl From<[u8; TILE_PLANE_SIZE]> for PatternTableTilePlane {
         PatternTableTilePlane(arr)
     }
 }
+
+impl Debug for PatternTableTilePlane {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        for byte in self.0.iter() {
+            write!(f, "{:08b}\n", byte)?;
+        }
+
+        Ok(())
+    }
+}
+
 
 #[derive(Default, Clone, Copy)]
 pub struct PatternTableTile {
@@ -87,5 +109,14 @@ impl PatternTableTile {
         }
 
         colors
+    }
+}
+
+impl Debug for PatternTableTile {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        write!(f, "{:?}\n", &self.plane_one)?;
+        write!(f, "{:?}", &self.plane_two)?;
+
+        Ok(())
     }
 }
