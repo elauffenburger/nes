@@ -21,6 +21,10 @@ pub const PATTERN_TABLE_ONE_START_ADDR: u16 = 0x0000;
 pub const PATTERN_TABLE_TWO_START_ADDR: u16 = 0x1000;
 pub const NUM_TILES: u8 = 0xff;
 
+pub const PPUCTRL: u16 = 0x2000;
+pub const PPUADDR: u16 = 0x2006;
+pub const PPUDATA: u16 = 0x2007;
+
 pub trait Ppu {
     fn start(&mut self);
     fn clock(&mut self);
@@ -31,11 +35,12 @@ pub trait Ppu {
     fn write_bytes_to(&mut self, start_addr: &Address, bytes: &[u8]);
     fn read_bytes(&mut self, start_addr: &Address, num_bytes: u16) -> Vec<u8>;
 
-    fn wire_cpu(&mut self, cpu: Rc<RefCell<Cpu>>);
+    fn on_cpu_memory_access(&mut self, event: &CpuMemoryAccessEvent);
 }
 
 pub struct DefaultPpu {
-    ppuaddr: u16,
+    vram_addr: u16,
+    ppu_ctrl: PpuCtrlRegister,
     pending_ppuaddr_hi: Option<u8>,
     mem: Box<PpuMemoryMap>,
 }
@@ -46,15 +51,35 @@ impl Ppu for DefaultPpu {
     }
 
     fn clock(&mut self) {
-        let ppuctrl = self.read_ppuctrl();
+        // TODO: impl
+    }
 
-        let ppuaddr = self.read_ppuaddr();
-        if let Some(addr_hi) = self.pending_ppuaddr_hi {
-            self.ppuaddr = u16_from_u8s(ppuaddr, addr_hi);
+    fn on_cpu_memory_access(&mut self, event: &CpuMemoryAccessEvent) {
+        match event {
+            CpuMemoryAccessEvent::Get(addr, _) => {}
+            CpuMemoryAccessEvent::Set(addr, val) => match addr.into() {
+                PPUCTRL => {
+                    self.ppu_ctrl = (*val).into();
+                }
+                PPUADDR => match self.pending_ppuaddr_hi {
+                    Some(addr_hi) => {
+                        self.vram_addr = u16_from_u8s(*val, addr_hi);
 
-            self.pending_ppuaddr_hi = None;
-        } else {
-            self.pending_ppuaddr_hi = Some(ppuaddr);
+                        self.pending_ppuaddr_hi = None;
+                    }
+                    None => self.pending_ppuaddr_hi = Some(*val),
+                },
+                PPUDATA => {
+                    // TODO: impl
+
+                    // write to vram addr
+                    self.mem.set(&self.vram_addr.into(), *val);
+
+                    // increment by ppuctrl vram incr val
+                    self.vram_addr += self.ppu_ctrl.vram_addr_incr;
+                }
+                _ => {}
+            },
         }
     }
 
@@ -92,13 +117,6 @@ impl Ppu for DefaultPpu {
 
         bytes
     }
-
-    fn wire_cpu(&mut self, cpu: Rc<RefCell<Cpu>>) {
-        cpu.borrow_mut()
-            .subscribe_mem(Box::from(|event: &CpuMemoryAccessEvent| {
-                self.on_cpu_memory_access(event)
-            }));
-    }
 }
 
 impl DefaultPpu {
@@ -106,11 +124,10 @@ impl DefaultPpu {
         DefaultPpu {
             mem: Box::from(DefaultPpuMemoryMap::new()),
             pending_ppuaddr_hi: None,
-            ppuaddr: 0x0000,
+            vram_addr: 0x0000,
+            ppu_ctrl: PpuCtrlRegister::default(),
         }
     }
-
-    fn on_cpu_memory_access(&mut self, event: &CpuMemoryAccessEvent) {}
 
     pub fn read_pattern_table_at(&self, start_addr: u16) -> PatternTable {
         let mut table = PatternTable::new();
@@ -146,42 +163,5 @@ impl DefaultPpu {
         }
 
         PatternTableTilePlane::from(plane)
-    }
-
-    fn read_ppuaddr(&mut self) -> u8 {
-        self.mem.get(&0x2006u16.into())
-    }
-}
-
-impl DefaultPpu {
-    fn read_ppuctrl(&self) -> PpuCtrlRegister {
-        let byte = self.mem.get(&0x2000u16.into());
-
-        PpuCtrlRegister {
-            nametable_addr: {
-                let lo = get_bit_val_u8(byte, 0);
-                let hi = get_bit_val_u8(byte, 1);
-
-                match lo & (hi << 1) {
-                    0 => 0x2000,
-                    1 => 0x2400,
-                    2 => 0x2800,
-                    3 => 0x2c00,
-                    val @ _ => panic!("Impossible for nametable_addr val to be {}", val),
-                }
-            },
-            vram_addr_incr_type: get_bit_val(byte, 2),
-            sprite_pattern_table_addr: match get_bit_val(byte, 3) {
-                false => 0x0000,
-                true => 0x1000,
-            },
-            bg_pattern_table_addr: match get_bit_val(byte, 4) {
-                false => 0x0000,
-                true => 0x1000,
-            },
-            sprite_size_type: get_bit_val(byte, 5),
-            ppu_master_slave_select: get_bit_val(byte, 6),
-            gen_nmi: get_bit_val(byte, 7),
-        }
     }
 }

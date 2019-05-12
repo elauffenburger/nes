@@ -28,7 +28,7 @@ pub trait Cpu {
 
     fn write_bytes_to(&mut self, start_addr: &Address, bytes: &[u8]);
     fn load_mem(&mut self, mem: Box<CpuMemoryMap>);
-    fn subscribe_mem(&mut self, handler: Box<Fn(&CpuMemoryAccessEvent)>);
+    fn subscribe_mem(&mut self, handler: Box<FnMut(&CpuMemoryAccessEvent)>);
 
     fn next_u8(&mut self) -> u8;
     fn next_u16(&mut self) -> u16;
@@ -219,7 +219,7 @@ impl Cpu for DefaultCpu {
         self.memory = mem;
     }
 
-    fn subscribe_mem(&mut self, handler: Box<Fn(&CpuMemoryAccessEvent)>) {
+    fn subscribe_mem(&mut self, handler: Box<FnMut(&CpuMemoryAccessEvent)>) {
         self.memory.subscribe(handler);
     }
 

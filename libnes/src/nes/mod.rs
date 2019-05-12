@@ -43,12 +43,18 @@ impl Nes for DefaultNes {
 
 impl DefaultNes {
     pub fn new(cpu: Rc<RefCell<Cpu>>, ppu: Rc<RefCell<Ppu>>) -> Self {
-        let nes = DefaultNes { cpu, ppu };
+        // Wire Cpu up to Ppu
+        {
+            let cpu = cpu.clone();
+            let ppu = ppu.clone();
 
-        cpu.borrow_mut()
-            .subscribe_mem(Box::from(|event: &CpuMemoryAccessEvent| {
-                ppu.borrow_mut().on_cpu_memory_access(event)
-            }));
+            cpu.borrow_mut()
+                .subscribe_mem(Box::from(move |event: &CpuMemoryAccessEvent| {
+                    ppu.borrow_mut().on_cpu_memory_access(event);
+                }));
+        }
+
+        let nes = DefaultNes { cpu, ppu };
 
         nes
     }
