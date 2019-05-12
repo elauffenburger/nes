@@ -23,12 +23,6 @@ impl App {
         self.gl.draw(args.viewport(), |c, gl| {
             clear(GREEN, gl);
         });
-
-        // DEBUG
-        // let ppu = self.nes.borrow_mut().get_ppu();
-        // let tile = &ppu.borrow_mut().get_pattern_tables()[0].get_tile_at_index(1);
-
-        // println!("ppu tile 0: {:?}", tile);
     }
 
     fn update(&mut self, args: &UpdateArgs) {
@@ -48,20 +42,6 @@ pub fn start_gui(nes: Rc<RefCell<Nes>>) {
     // Start NES up -- this should probably be controlled
     // somewhere else eventually
     nes.borrow_mut().start();
-
-    // DEBUG
-    let ppu = nes.borrow_mut().get_ppu();
-    let table = &ppu.borrow_mut().get_pattern_tables()[0];
-
-    // for (i, byte) in mem.iter().enumerate() {
-    //     if i % 16 == 0 {
-    //         println!("");
-    //     }
-
-    //     print!("{:02x}\t", byte);
-    // }
-
-    println!("ppu pattern table one:\n{:?}", table);
 
     let mut app = App {
         gl: GlGraphics::new(opengl),

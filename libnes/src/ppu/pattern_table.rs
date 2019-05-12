@@ -40,7 +40,7 @@ impl PatternTable {
 impl Debug for PatternTable {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         for (i, tile) in self.0.iter().enumerate() {
-            write!(f, "tile {}:\n{:?}\n", i, tile)?;
+            write!(f, "tile {:02x}:\n{:?}\n", i, tile)?;
         }
 
         Ok(())
@@ -65,7 +65,6 @@ impl Debug for PatternTableTilePlane {
         Ok(())
     }
 }
-
 
 #[derive(Default, Clone, Copy)]
 pub struct PatternTableTile {
@@ -93,10 +92,10 @@ impl PatternTableTile {
             let row_plane_two = self.plane_two.0[row_index];
 
             for col_index in 0..8 {
-                let plane_one_col_val = get_bit_val_u8(row_plane_one, col_index);
-                let plane_two_col_val = get_bit_val_u8(row_plane_two, col_index);
+                let plane_one_col_val = get_bit_val_u8(row_plane_one, 7 - col_index);
+                let plane_two_col_val = get_bit_val_u8(row_plane_two, 7 - col_index);
 
-                let color_val = plane_one_col_val & (plane_two_col_val << 1);
+                let color_val = plane_one_col_val | plane_two_col_val << 1;
                 let color = match color_val {
                     0...3 => color_val,
                     val @ _ => panic!("Impossible color val: {}", val),
@@ -114,9 +113,21 @@ impl PatternTableTile {
 
 impl Debug for PatternTableTile {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        // Planes
+        write!(f, "planes:\n")?;
         write!(f, "{:?}\n", &self.plane_one)?;
-        write!(f, "{:?}", &self.plane_two)?;
+        write!(f, "{:?}\n", &self.plane_two)?;
 
-        Ok(())
+        // Composed
+        write!(f, "composite:\n")?;
+        for (i, byte) in self.get_color_indices().iter().enumerate() {
+            if i != 0 && i % TILE_PLANE_SIZE == 0 {
+                write!(f, "\n")?;
+            }
+
+            write!(f, "{:02x} ", byte)?;
+        }
+
+        write!(f, "\n")
     }
 }
