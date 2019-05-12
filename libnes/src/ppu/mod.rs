@@ -7,10 +7,15 @@ pub mod tiles;
 
 use crate::bits::u16_from_u8s;
 use crate::bits::{get_bit_val, get_bit_val_u8};
+use crate::cpu::mem::CpuMemoryAccessEvent;
+use crate::cpu::Cpu;
+
 use mem::{Address, DefaultPpuMemoryMap, PpuMemoryMap};
 use name_table::*;
 use pattern_table::*;
 use registers::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub const PATTERN_TABLE_ONE_START_ADDR: u16 = 0x0000;
 pub const PATTERN_TABLE_TWO_START_ADDR: u16 = 0x1000;
@@ -25,6 +30,8 @@ pub trait Ppu {
 
     fn write_bytes_to(&mut self, start_addr: &Address, bytes: &[u8]);
     fn read_bytes(&mut self, start_addr: &Address, num_bytes: u16) -> Vec<u8>;
+
+    fn wire_cpu(&mut self, cpu: Rc<RefCell<Cpu>>);
 }
 
 pub struct DefaultPpu {
@@ -85,6 +92,13 @@ impl Ppu for DefaultPpu {
 
         bytes
     }
+
+    fn wire_cpu(&mut self, cpu: Rc<RefCell<Cpu>>) {
+        cpu.borrow_mut()
+            .subscribe_mem(Box::from(|event: &CpuMemoryAccessEvent| {
+                self.on_cpu_memory_access(event)
+            }));
+    }
 }
 
 impl DefaultPpu {
@@ -95,6 +109,8 @@ impl DefaultPpu {
             ppuaddr: 0x0000,
         }
     }
+
+    fn on_cpu_memory_access(&mut self, event: &CpuMemoryAccessEvent) {}
 
     pub fn read_pattern_table_at(&self, start_addr: u16) -> PatternTable {
         let mut table = PatternTable::new();

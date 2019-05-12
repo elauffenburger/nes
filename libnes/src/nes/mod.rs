@@ -1,3 +1,4 @@
+use crate::cpu::mem::CpuMemoryAccessEvent;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -8,7 +9,7 @@ pub trait Nes {
     fn start(&mut self) -> ();
     fn reset(&mut self) -> ();
     fn clock(&mut self) -> ();
-    
+
     fn get_cpu(&mut self) -> Rc<RefCell<Cpu>>;
     fn get_ppu(&mut self) -> Rc<RefCell<Ppu>>;
 }
@@ -42,6 +43,13 @@ impl Nes for DefaultNes {
 
 impl DefaultNes {
     pub fn new(cpu: Rc<RefCell<Cpu>>, ppu: Rc<RefCell<Ppu>>) -> Self {
-        DefaultNes { cpu, ppu }
+        let nes = DefaultNes { cpu, ppu };
+
+        cpu.borrow_mut()
+            .subscribe_mem(Box::from(|event: &CpuMemoryAccessEvent| {
+                ppu.borrow_mut().on_cpu_memory_access(event)
+            }));
+
+        nes
     }
 }

@@ -9,6 +9,7 @@ mod debugger;
 mod gui;
 pub mod util;
 
+use libnes::cpu::mem::CpuMemoryAccessEvent;
 use std::cell::RefCell;
 use std::fs;
 use std::rc::Rc;
@@ -80,6 +81,7 @@ fn exec_command_run<'a>(options: &ArgMatches<'a>) {
 
     let cpu = rc_ref(DefaultCpu::new(debug));
     let ppu = rc_ref(DefaultPpu::new());
+
     let nes = rc_ref(DefaultNes::new(cpu, ppu));
 
     let filename = options
