@@ -115,9 +115,15 @@ impl Cpu for DefaultCpu {
         let raw_start_addr: u16 = start_addr.into();
 
         for (i, byte) in bytes.iter().enumerate() {
-            let addr = (raw_start_addr + (i as u16)).into();
+            let addr_result = std::panic::catch_unwind(|| (raw_start_addr + (i as u16)).into());
 
-            self.memory.set(&addr, byte.clone());
+            match addr_result {
+                Ok(addr) => self.memory.set(&addr, byte.clone()),
+                Err(err) => {
+                    println!("Error adding {} and {}: {:?}", raw_start_addr, i, err);
+                    panic!(err);
+                }
+            }
         }
     }
 

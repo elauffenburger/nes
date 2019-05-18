@@ -12,9 +12,9 @@ use std::cell::RefCell;
 use std::clone::Clone;
 use std::rc::Rc;
 
+use attr_table::*;
 use mem::{Address, DefaultPpuMemoryMap, PpuMemoryMap};
 use nametable::*;
-use attr_table::*;
 use registers::*;
 
 pub const PATTERN_TABLE_ONE_START_ADDR: u16 = 0x0000;
@@ -22,8 +22,14 @@ pub const PATTERN_TABLE_TWO_START_ADDR: u16 = 0x1000;
 pub const NUM_TILES: u8 = 0xff;
 
 pub const PPUCTRL: u16 = 0x2000;
+pub const PPUMASK: u16 = 0x2001;
+pub const PPUSTATUS: u16 = 0x2002;
+pub const OAMADDR: u16 = 0x2003;
+pub const OAMDATA: u16 = 0x2004;
+pub const PPUSCROLL: u16 = 0x2005;
 pub const PPUADDR: u16 = 0x2006;
 pub const PPUDATA: u16 = 0x2007;
+pub const OAMDMA: u16 = 0x4014;
 
 pub trait Ppu {
     fn start(&mut self);
@@ -43,6 +49,7 @@ pub trait Ppu {
 
 pub struct DefaultPpu {
     vram_addr: u16,
+    oamaddr: u16,
     ppu_ctrl: PpuCtrlRegister,
     pending_ppuaddr_hi: Option<u8>,
     mem: Box<PpuMemoryMap>,
@@ -59,7 +66,16 @@ impl Ppu for DefaultPpu {
 
     fn on_cpu_memory_access(&mut self, event: &CpuMemoryAccessEvent) {
         match event {
-            CpuMemoryAccessEvent::Get(addr, _) => {}
+            CpuMemoryAccessEvent::Get(addr, _) => {
+                let raw_addr: u16 = addr.into();
+
+                match raw_addr {
+                    PPUSTATUS => {}
+                    OAMDATA => {}
+                    PPUDATA => {},
+                    _ => {}
+                }
+            }
             CpuMemoryAccessEvent::Set(addr, val) => {
                 let raw_addr: u16 = addr.into();
 
@@ -67,6 +83,7 @@ impl Ppu for DefaultPpu {
                     PPUCTRL => {
                         self.ppu_ctrl = (*val).into();
                     }
+                    PPUMASK => {}
                     PPUADDR => match self.pending_ppuaddr_hi {
                         Some(addr_hi) => {
                             self.vram_addr = u16_from_u8s(*val, addr_hi);
@@ -82,6 +99,12 @@ impl Ppu for DefaultPpu {
                         // increment by ppuctrl vram incr val
                         self.vram_addr += self.ppu_ctrl.vram_addr_incr;
                     }
+                    OAMADDR => {
+                        self.oamaddr = raw_addr;
+                    }
+                    OAMDATA => {}
+                    OAMDMA => {}
+                    PPUSCROLL => {}
                     _ => {}
                 }
             }
@@ -149,6 +172,7 @@ impl DefaultPpu {
             mem: Box::from(DefaultPpuMemoryMap::new()),
             pending_ppuaddr_hi: None,
             vram_addr: 0x0000,
+            oamaddr: 0x0000,
             ppu_ctrl: PpuCtrlRegister::default(),
         }
     }

@@ -25,7 +25,7 @@ impl GetOperandResult {
 
     pub fn resolve_addr(&self) -> Address {
         match self {
-            GetOperandResult::Value(_) => panic!("Cannot resolve addr on a Value result!"),
+            GetOperandResult::Value(addr) => (*addr as u8 as u16).into(),
             GetOperandResult::Address(ref addr) => addr.clone(),
         }
     }

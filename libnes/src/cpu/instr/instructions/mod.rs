@@ -21,7 +21,7 @@ where
     T: Cpu,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
-        write!(f, "{} ({:#04x})", self.instr, self.opcode)
+        write!(f, "{} ({:#04x} {:?})", self.instr, self.opcode, self.addr_mode)
     }
 }
 
