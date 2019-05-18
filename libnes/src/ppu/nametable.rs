@@ -20,7 +20,7 @@ pub struct NameTable {
 
 impl NameTable {
     pub fn get_tile_at_loc(&self, row: u8, col: u8, pattern_table: &Rc<RefCell<PatternTable>>) -> Tile {
-        let index = (row as u16 * NAMETABLE_DIMS[0] as u16) + col as u16;
+        let index = (row as u16 * NAMETABLE_DIMS[1] as u16) + col as u16;
 
         if index > NAMETABLE_SIZE as u16 {
             panic!("invalid tile index: {}", index);
@@ -58,7 +58,7 @@ impl NameTable {
 impl std::fmt::Debug for NameTable {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         for (i, tile_num) in self.data.iter().enumerate() {
-            let col = i % 8;
+            let col = i % NAMETABLE_DIMS[1] as usize;
 
             if col == 0 && i != 0 {
                 write!(f, "\n")?;

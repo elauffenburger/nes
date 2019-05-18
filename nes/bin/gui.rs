@@ -49,6 +49,13 @@ impl App {
 
             if print_debug_info {
                 println!("nametable:\n{:?}\n", &nametable);
+
+                // print header for data
+                for col in 0..NAMETABLE_DIMS[1] {
+                    print!("{:#02}\t", col);
+                }
+
+                println!();
             }
 
             let mut index = 0;
@@ -61,22 +68,22 @@ impl App {
                     let colors = tile.pattern_table_tile.get_color_indices();
 
                     if print_debug_info {
-                        println!("tile index: {} ({:#02x})", tile.index, tile.index);
-                        println!(
-                            "tile pattern table index: {} ({:#02x})",
-                            tile.pattern_table_tile_index, tile.pattern_table_tile_index
-                        );
+                        if col == 0 && index != 0 {
+                            println!("");
+                        }
+
+                        print!("{:#02x}({})\t", tile.pattern_table_tile_index, tile.index);
                     }
 
-                    const tile_size: f64 = 16.0;
-                    let tile_x_offset = col as f64 * tile_size;
-                    let tile_y_offset = row as f64 * tile_size;
+                    const TILE_SIZE: f64 = 16.0;
+                    let tile_x_offset = col as f64 * TILE_SIZE;
+                    let tile_y_offset = row as f64 * TILE_SIZE;
 
                     for (i, color) in colors.iter().enumerate() {
                         let row = (i / 8) as f64;
                         let col = (i % 8) as f64;
 
-                        let pixel_size = tile_size / 8.0;
+                        let pixel_size = TILE_SIZE / 8.0;
 
                         rectangle(
                             match color {
@@ -94,6 +101,10 @@ impl App {
 
                     index += 1;
                 }
+            }
+
+            if print_debug_info {
+                println!();
             }
         });
     }
