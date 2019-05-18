@@ -8,9 +8,7 @@ use piston::event_loop::*;
 use piston::input::*;
 use piston::window::WindowSettings;
 
-use libnes::cpu::Cpu;
 use libnes::nes::Nes;
-use libnes::ppu::Ppu;
 
 struct AppDebugState {
     nametable_tile_index: u16,
@@ -47,17 +45,6 @@ impl App {
             let nametable = ppu.borrow().get_active_nametable();
             let pattern_table = ppu.borrow_mut().get_active_pattern_table();
 
-            if print_debug_info {
-                println!("nametable:\n{:?}\n", &nametable);
-
-                // print header for data
-                for col in 0..NAMETABLE_DIMS[1] {
-                    print!("{:#02}\t", col);
-                }
-
-                println!();
-            }
-
             let mut index = 0;
 
             for row in 0..NAMETABLE_DIMS[0] {
@@ -66,14 +53,6 @@ impl App {
 
                     // TODO: actually use palette for stuff
                     let colors = tile.pattern_table_tile.get_color_indices();
-
-                    if print_debug_info {
-                        if col == 0 && index != 0 {
-                            println!("");
-                        }
-
-                        print!("{:#02x}({})\t", tile.pattern_table_tile_index, tile.index);
-                    }
 
                     const TILE_SIZE: f64 = 16.0;
                     let tile_x_offset = col as f64 * TILE_SIZE;
@@ -102,10 +81,6 @@ impl App {
                     index += 1;
                 }
             }
-
-            if print_debug_info {
-                println!();
-            }
         });
     }
 
@@ -118,7 +93,7 @@ impl App {
 pub fn start_gui(nes: Rc<RefCell<Nes>>) {
     let opengl = OpenGL::V3_2;
 
-    let mut window: Window = WindowSettings::new("nes", [640, 480])
+    let mut window: Window = WindowSettings::new("nes", [480, 480])
         .opengl(opengl)
         .exit_on_esc(true)
         .build()

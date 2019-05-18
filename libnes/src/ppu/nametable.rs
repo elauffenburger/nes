@@ -1,8 +1,8 @@
-use std::cell::RefCell;
-use std::rc::Rc;
 pub use super::attr_table::*;
 pub use super::pattern_table::*;
 pub use super::tiles::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub const NAMETABLE_SIZE: usize = 0x03c0;
 pub const NAMETABLE_ADDRESSES: [u16; 4] = [0x2000, 0x2400, 0x2800, 0x2c00];
@@ -19,7 +19,12 @@ pub struct NameTable {
 }
 
 impl NameTable {
-    pub fn get_tile_at_loc(&self, row: u8, col: u8, pattern_table: &Rc<RefCell<PatternTable>>) -> Tile {
+    pub fn get_tile_at_loc(
+        &self,
+        row: u8,
+        col: u8,
+        pattern_table: &Rc<RefCell<PatternTable>>,
+    ) -> Tile {
         let index = (row as u16 * NAMETABLE_DIMS[1] as u16) + col as u16;
 
         if index > NAMETABLE_SIZE as u16 {
@@ -42,7 +47,11 @@ impl NameTable {
                     .expect("Failed to get palette_num for tile loc")
                     .into();
 
-                0b0001_1111 & (palette_num << 2) & color_index
+                // see https://wiki.nesdev.com/w/index.php/PPU_palettes
+                // bg select is always 1
+                let color = 0b0001_1111 & (palette_num << 2) & color_index;
+
+                color
             })
             .collect();
 
@@ -50,7 +59,7 @@ impl NameTable {
             pattern_table_tile,
             colors,
             index,
-            pattern_table_tile_index
+            pattern_table_tile_index,
         }
     }
 }
@@ -94,6 +103,6 @@ impl From<u8> for Color {
 pub fn get_nametable_addr_at_index(index: u8) -> u16 {
     match index {
         i @ 0...3 => NAMETABLE_ADDRESSES[i as usize],
-        _ => panic!("Impossible nametable index val to be {}", index),
+        _ => panic!("Impossible nametable index val: {}", index),
     }
 }

@@ -1,4 +1,5 @@
 pub const ATTRIBUTE_TABLE_SIZE: usize = 0x40;
+pub const ATTRIBUTE_TABLE_ADDRESSES: [u16; 4] = [0x23c0, 0x27c0, 0x2bc0, 0x2fc0];
 
 #[derive(Clone)]
 pub struct AttributeTableEntry(u8);
@@ -65,4 +66,11 @@ pub enum AttributeTableEntryQuadrant {
     BottomLeft,
     TopLeft,
     TopRight,
+}
+
+pub fn get_attribute_table_addr_at_index(index: u8) -> u16 {
+    match index {
+        i @ 0...3 => ATTRIBUTE_TABLE_ADDRESSES[i as usize],
+        _ => panic!("Impossible attribtue table index val: {}", index)
+    }
 }

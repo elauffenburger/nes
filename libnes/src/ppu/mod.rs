@@ -14,6 +14,7 @@ use std::rc::Rc;
 
 use mem::{Address, DefaultPpuMemoryMap, PpuMemoryMap};
 use nametable::*;
+use attr_table::*;
 use registers::*;
 
 pub const PATTERN_TABLE_ONE_START_ADDR: u16 = 0x0000;
@@ -103,7 +104,7 @@ impl Ppu for DefaultPpu {
         let nametable_addr = get_nametable_addr_at_index(table_index);
         let data = self.read_bytes(&nametable_addr.into(), NAMETABLE_SIZE as u16);
         let attribute_table = AttributeTable::new(self.read_bytes(
-            &(nametable_addr + NAMETABLE_SIZE as u16).into(),
+            &get_attribute_table_addr_at_index(table_index).into(),
             ATTRIBUTE_TABLE_SIZE as u16,
         ));
 
