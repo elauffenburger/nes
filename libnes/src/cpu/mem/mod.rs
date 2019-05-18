@@ -10,6 +10,7 @@ pub trait CpuMemoryMap {
     fn subscribe(&mut self, handler: Box<FnMut(&CpuMemoryAccessEvent)>);
 }
 
+#[derive(Debug)]
 pub enum CpuMemoryAccessEvent {
     Get(Address, u8),
     Set(Address, u8),
@@ -47,8 +48,8 @@ impl CpuMemoryMap for DefaultCpuMemoryMap {
         self.memory[effective_addr as usize] = val;
 
         // Notify subscribers
-        self.subject
-            .next(CpuMemoryAccessEvent::Set(addr.clone(), val));
+        let event = CpuMemoryAccessEvent::Set(effective_addr.into(), val);
+        self.subject.next(event);
     }
 
     fn subscribe(&mut self, handler: Box<FnMut(&CpuMemoryAccessEvent)>) {

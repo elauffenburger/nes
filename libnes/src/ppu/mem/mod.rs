@@ -15,19 +15,23 @@ pub enum Address {
 impl From<u16> for Address {
     fn from(addr: u16) -> Self {
         match addr {
-            0x0000...0x07ff => Address::Address(addr),
-            0x0800...0x1fff => Address::Mirror {
-                mirror_lo: 0x0000,
-                mirror_hi: 0x7fff,
-                addr: addr,
-            },
-            0x2000...0x2007 => Address::Address(addr),
-            0x2008...0x3fff => Address::Mirror {
+            0x0000...0x2fff => Address::Address(addr),
+            0x3000...0x3eff => Address::Mirror {
                 mirror_lo: 0x2000,
-                mirror_hi: 0x2007,
-                addr: addr,
+                mirror_hi: 0x2eff,
+                addr
             },
-            0x4000...0xffff => Address::Address(addr),
+            0x3f00...0x3f1f => Address::Address(addr),
+            0x3f20...0x3fff => Address::Mirror {
+                mirror_lo: 0x3f00,
+                mirror_hi: 0x3f1f,
+                addr
+            },
+            0x4000...0x9fff => Address::Mirror {
+                mirror_lo: 0x0000,
+                mirror_hi: 0x3fff,
+                addr
+            },
             _ => panic!(format!(
                 "Bad address '{:#06x}' while converting from u16 to Address",
                 addr

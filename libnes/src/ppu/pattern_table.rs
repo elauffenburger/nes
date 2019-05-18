@@ -1,3 +1,6 @@
+use crate::util::rc_ref;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::fmt::Debug;
 
 use super::NUM_TILES;
@@ -6,13 +9,13 @@ use crate::bits::get_bit_val_u8;
 pub const TILE_PLANE_SIZE: usize = 0x08;
 pub const TILE_SIZE: usize = 0x40;
 
-pub struct PatternTable(Box<[PatternTableTile; NUM_TILES as usize]>);
+pub struct PatternTable(Rc<RefCell<[PatternTableTile; NUM_TILES as usize]>>);
 
 impl PatternTable {
     pub fn new() -> Self {
         let tiles = [PatternTableTile::default(); NUM_TILES as usize];
 
-        PatternTable(Box::from(tiles))
+        PatternTable(rc_ref(tiles))
     }
 
     pub fn set_tile_at_index(
@@ -24,7 +27,7 @@ impl PatternTable {
             return Err("Index out of range");
         }
 
-        self.0[index as usize] = tile;
+        self.0.borrow_mut()[index as usize] = tile;
         Ok(())
     }
 
@@ -33,13 +36,13 @@ impl PatternTable {
             return Err("Index out of range");
         }
 
-        Ok(self.0[index as usize])
+        Ok(self.0.borrow_mut()[index as usize])
     }
 }
 
 impl Debug for PatternTable {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
-        for (i, tile) in self.0.iter().enumerate() {
+        for (i, tile) in self.0.borrow().iter().enumerate() {
             write!(f, "tile {:02x}:\n{:?}\n", i, tile)?;
         }
 

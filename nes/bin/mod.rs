@@ -113,7 +113,18 @@ fn exec_command_run<'a>(options: &ArgMatches<'a>) {
         Some("false") => {
             match break_mode {
                 true => start_debugger(cpu),
-                false => cpu.borrow_mut().run(),
+                false => {
+                    let mut nes = nes.borrow_mut();
+                    let ppu = nes.get_ppu();
+
+                    loop {
+                        let nametable = ppu.borrow().get_active_nametable();
+                        let pattern_table = ppu.borrow_mut().get_active_pattern_table();
+                        // println!("nametable:\n{:?}\n", &nametable);
+
+                        nes.tick();
+                    }
+                }
             };
         }
         _ => {

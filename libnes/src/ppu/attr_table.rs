@@ -14,9 +14,13 @@ impl AttributeTableEntry {
     }
 }
 
-pub struct AttributeTable<'a>(&'a [AttributeTableEntry; ATTRIBUTE_TABLE_SIZE]);
+pub struct AttributeTable(Vec<AttributeTableEntry>);
 
-impl<'a> AttributeTable<'a> {
+impl AttributeTable {
+    pub fn new(data: Vec<u8>) -> Self {
+        AttributeTable(data.into_iter().map(|b| AttributeTableEntry(b)).collect())
+    }
+
     pub fn get_palette_num_for_tile_loc(&self, row: u8, col: u8) -> Option<u8> {
         let entry = self
             .get_entry_for_tile_loc(row, col)

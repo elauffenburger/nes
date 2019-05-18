@@ -8,7 +8,7 @@ use crate::ppu::Ppu;
 pub trait Nes {
     fn start(&mut self) -> ();
     fn reset(&mut self) -> ();
-    fn clock(&mut self) -> ();
+    fn tick(&mut self) -> ();
 
     fn get_cpu(&mut self) -> Rc<RefCell<Cpu>>;
     fn get_ppu(&mut self) -> Rc<RefCell<Ppu>>;
@@ -27,8 +27,11 @@ impl Nes for DefaultNes {
 
     fn reset(&mut self) {}
 
-    fn clock(&mut self) {
-        self.cpu.borrow_mut().clock();
+    fn tick(&mut self) {
+        for _ in 0..(1_789_773 / 60) {
+            self.cpu.borrow_mut().clock();
+        }
+
         self.ppu.borrow_mut().clock();
     }
 

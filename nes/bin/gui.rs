@@ -1,3 +1,4 @@
+use libnes::ppu::nametable::NAMETABLE_DIMS;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -7,11 +8,19 @@ use piston::event_loop::*;
 use piston::input::*;
 use piston::window::WindowSettings;
 
+use libnes::cpu::Cpu;
 use libnes::nes::Nes;
+use libnes::ppu::Ppu;
+
+struct AppDebugState {
+    nametable_tile_index: u16,
+}
 
 struct App {
     gl: GlGraphics,
     nes: Rc<RefCell<Nes>>,
+
+    debug: AppDebugState,
 }
 
 impl App {
@@ -19,14 +28,62 @@ impl App {
         use graphics::*;
 
         const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
+        const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+
+        let mut nes = self.nes.borrow_mut();
+        let mut ppu = nes.get_ppu();
+
+        let nametable_draw_tile_index = self.debug.nametable_tile_index;
+
+        println!("nametable_draw_tile_index: {}", nametable_draw_tile_index);
 
         self.gl.draw(args.viewport(), |c, gl| {
             clear(GREEN, gl);
+
+            let nametable = ppu.borrow().get_active_nametable();
+            let pattern_table = ppu.borrow_mut().get_active_pattern_table();
+
+            println!("nametable:\n{:?}\n", &nametable);
+
+            let mut index = 0;
+
+            for row in 0..NAMETABLE_DIMS[0] {
+                for col in 0..NAMETABLE_DIMS[1] {
+                    let tile = nametable.get_tile_at_loc(row, col, &pattern_table);
+                    let colors = tile.colors;
+
+                    // for right now, just draw one tile
+                    if index != nametable_draw_tile_index {
+                        index += 1;
+                        continue;
+                    }
+
+                    for (i, color) in colors.iter().enumerate() {
+                        let row = (i / 8) as f64;
+                        let col = (i % 8) as f64;
+
+                        let size = 50.0;
+
+                        rectangle(
+                            match color {
+                                0 => BLACK,
+                                _ => GREEN,
+                            },
+                            rectangle::square(col * size, row * size, size),
+                            c.transform.trans(0.0, 0.0),
+                            gl,
+                        );
+                    }
+
+                    index += 1;
+                }
+            }
         });
     }
 
     fn update(&mut self, args: &UpdateArgs) {
-        self.nes.borrow_mut().clock();
+        let mut nes = self.nes.borrow_mut();
+        nes.tick();
     }
 }
 
@@ -46,6 +103,9 @@ pub fn start_gui(nes: Rc<RefCell<Nes>>) {
     let mut app = App {
         gl: GlGraphics::new(opengl),
         nes,
+        debug: AppDebugState {
+            nametable_tile_index: 103,
+        },
     };
 
     let mut events = Events::new(EventSettings::new());
@@ -56,6 +116,18 @@ pub fn start_gui(nes: Rc<RefCell<Nes>>) {
 
         if let Some(u) = e.update_args() {
             app.update(&u);
+        }
+
+        if let Some(Button::Keyboard(key)) = e.press_args() {
+            match key {
+                Key::Right => {
+                    app.debug.nametable_tile_index += 1;
+                }
+                Key::Left => {
+                    app.debug.nametable_tile_index -= 1;
+                }
+                _ => {}
+            }
         }
     }
 }

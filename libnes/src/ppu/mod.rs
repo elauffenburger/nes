@@ -1,21 +1,20 @@
 pub mod attr_table;
 pub mod mem;
-pub mod name_table;
+pub mod nametable;
 pub mod pattern_table;
 pub mod registers;
 pub mod tiles;
 
 use crate::bits::u16_from_u8s;
-use crate::bits::{get_bit_val, get_bit_val_u8};
 use crate::cpu::mem::CpuMemoryAccessEvent;
-use crate::cpu::Cpu;
+use crate::util::rc_ref;
+use std::cell::RefCell;
+use std::clone::Clone;
+use std::rc::Rc;
 
 use mem::{Address, DefaultPpuMemoryMap, PpuMemoryMap};
-use name_table::*;
-use pattern_table::*;
+use nametable::*;
 use registers::*;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 pub const PATTERN_TABLE_ONE_START_ADDR: u16 = 0x0000;
 pub const PATTERN_TABLE_TWO_START_ADDR: u16 = 0x1000;
@@ -29,11 +28,14 @@ pub trait Ppu {
     fn start(&mut self);
     fn clock(&mut self);
 
-    fn get_pattern_tables(&self) -> [PatternTable; 2];
-    fn get_name_table(&self, table_index: u8) -> Option<NameTable>;
+    fn get_pattern_tables(&self) -> [Rc<RefCell<PatternTable>>; 2];
+    fn get_active_pattern_table(&self) -> Rc<RefCell<PatternTable>>;
+
+    fn get_nametable(&self, table_index: u8) -> NameTable;
+    fn get_active_nametable(&self) -> NameTable;
 
     fn write_bytes_to(&mut self, start_addr: &Address, bytes: &[u8]);
-    fn read_bytes(&mut self, start_addr: &Address, num_bytes: u16) -> Vec<u8>;
+    fn read_bytes(&self, start_addr: &Address, num_bytes: u16) -> Vec<u8>;
 
     fn on_cpu_memory_access(&mut self, event: &CpuMemoryAccessEvent);
 }
@@ -57,42 +59,69 @@ impl Ppu for DefaultPpu {
     fn on_cpu_memory_access(&mut self, event: &CpuMemoryAccessEvent) {
         match event {
             CpuMemoryAccessEvent::Get(addr, _) => {}
-            CpuMemoryAccessEvent::Set(addr, val) => match addr.into() {
-                PPUCTRL => {
-                    self.ppu_ctrl = (*val).into();
-                }
-                PPUADDR => match self.pending_ppuaddr_hi {
-                    Some(addr_hi) => {
-                        self.vram_addr = u16_from_u8s(*val, addr_hi);
+            CpuMemoryAccessEvent::Set(addr, val) => {
+                let raw_addr: u16 = addr.into();
 
-                        self.pending_ppuaddr_hi = None;
+                match raw_addr {
+                    PPUCTRL => {
+                        self.ppu_ctrl = (*val).into();
                     }
-                    None => self.pending_ppuaddr_hi = Some(*val),
-                },
-                PPUDATA => {
-                    // TODO: impl
+                    PPUADDR => match self.pending_ppuaddr_hi {
+                        Some(addr_hi) => {
+                            self.vram_addr = u16_from_u8s(*val, addr_hi);
 
-                    // write to vram addr
-                    self.mem.set(&self.vram_addr.into(), *val);
+                            println!("setting vram addr (lo: {:#02x}, hi: {:#02x}) to {:#02x}", *val, addr_hi, self.vram_addr);
 
-                    // increment by ppuctrl vram incr val
-                    self.vram_addr += self.ppu_ctrl.vram_addr_incr;
+                            self.pending_ppuaddr_hi = None;
+                        }
+                        None => self.pending_ppuaddr_hi = Some(*val),
+                    },
+                    PPUDATA => {
+                        println!("writing {:#02x} to {:#02x}", *val, &self.vram_addr);
+
+                        // write to vram addr
+                        self.mem.set(&self.vram_addr.into(), *val);
+
+                        // increment by ppuctrl vram incr val
+                        self.vram_addr += self.ppu_ctrl.vram_addr_incr;
+                    }
+                    _ => {}
                 }
-                _ => {}
-            },
+            }
         }
     }
 
-    fn get_pattern_tables(&self) -> [PatternTable; 2] {
+    fn get_pattern_tables(&self) -> [Rc<RefCell<PatternTable>>; 2] {
         [
             self.read_pattern_table_at(PATTERN_TABLE_ONE_START_ADDR),
             self.read_pattern_table_at(PATTERN_TABLE_TWO_START_ADDR),
         ]
     }
 
-    fn get_name_table(&self, table_index: u8) -> Option<NameTable> {
-        // TODO: impl
-        None
+    fn get_active_pattern_table(&self) -> Rc<RefCell<PatternTable>> {
+        let pattern_tables = self.get_pattern_tables();
+        pattern_tables[self.ppu_ctrl.bg_pattern_table_index as usize].clone()
+    }
+
+    fn get_nametable(&self, table_index: u8) -> NameTable {
+        let nametable_addr = get_nametable_addr_at_index(table_index);
+        let data = self.read_bytes(&nametable_addr.into(), NAMETABLE_SIZE as u16);
+        let attribute_table = AttributeTable::new(self.read_bytes(
+            &(nametable_addr + NAMETABLE_SIZE as u16).into(),
+            ATTRIBUTE_TABLE_SIZE as u16,
+        ));
+
+        println!("0x20eb: {:#02x}", self.read_bytes(&0x20ebu16.into(), 1)[0]);
+
+        NameTable {
+            index: table_index,
+            data,
+            attribute_table,
+        }
+    }
+
+    fn get_active_nametable(&self) -> NameTable {
+        self.get_nametable(self.ppu_ctrl.nametable_index)
     }
 
     fn write_bytes_to(&mut self, start_addr: &Address, bytes: &[u8]) {
@@ -105,7 +134,7 @@ impl Ppu for DefaultPpu {
         }
     }
 
-    fn read_bytes(&mut self, start_addr: &Address, num_bytes: u16) -> Vec<u8> {
+    fn read_bytes(&self, start_addr: &Address, num_bytes: u16) -> Vec<u8> {
         let raw_start_addr: u16 = start_addr.into();
 
         let mut bytes = vec![];
@@ -129,7 +158,7 @@ impl DefaultPpu {
         }
     }
 
-    pub fn read_pattern_table_at(&self, start_addr: u16) -> PatternTable {
+    pub fn read_pattern_table_at(&self, start_addr: u16) -> Rc<RefCell<PatternTable>> {
         let mut table = PatternTable::new();
         let mut tile_index = 0u8;
 
@@ -149,7 +178,7 @@ impl DefaultPpu {
             tile_index += 1;
         }
 
-        table
+        rc_ref(table)
     }
 
     fn read_tile_plane_from(&self, start_addr: u16) -> PatternTableTilePlane {
