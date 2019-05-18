@@ -14,6 +14,7 @@ use libnes::ppu::Ppu;
 
 struct AppDebugState {
     nametable_tile_index: u16,
+    print_debug_info: bool,
 }
 
 struct App {
@@ -35,7 +36,10 @@ impl App {
 
         let nametable_draw_tile_index = self.debug.nametable_tile_index;
 
-        println!("nametable_draw_tile_index: {}", nametable_draw_tile_index);
+        let print_debug_info = self.debug.print_debug_info;
+        if print_debug_info {
+            self.debug.print_debug_info = false;
+        }
 
         self.gl.draw(args.viewport(), |c, gl| {
             clear(GREEN, gl);
@@ -43,14 +47,17 @@ impl App {
             let nametable = ppu.borrow().get_active_nametable();
             let pattern_table = ppu.borrow_mut().get_active_pattern_table();
 
-            println!("nametable:\n{:?}\n", &nametable);
+            if print_debug_info {
+                println!("nametable:\n{:?}\n", &nametable);
+            }
 
             let mut index = 0;
 
             for row in 0..NAMETABLE_DIMS[0] {
                 for col in 0..NAMETABLE_DIMS[1] {
                     let tile = nametable.get_tile_at_loc(row, col, &pattern_table);
-                    let colors = tile.colors;
+                    // TODO: actually use palette for stuff
+                    let colors = tile.pattern_table_tile.get_color_indices();
 
                     // for right now, just draw one tile
                     if index != nametable_draw_tile_index {
@@ -58,19 +65,28 @@ impl App {
                         continue;
                     }
 
+                    if print_debug_info {
+                        println!("tile index: {} ({:#02x})", tile.index, tile.index);
+                        println!("tile pattern table index: {} ({:#02x})", tile.pattern_table_tile_index, tile.pattern_table_tile_index);
+                    }
+
                     for (i, color) in colors.iter().enumerate() {
                         let row = (i / 8) as f64;
                         let col = (i % 8) as f64;
 
-                        let size = 50.0;
+                        let size = 20.0;
+
+                        if print_debug_info {
+                            println!("{} @ ({},{})", color, row * size, col * size);
+                        }
 
                         rectangle(
                             match color {
                                 0 => BLACK,
                                 _ => GREEN,
                             },
-                            rectangle::square(col * size, row * size, size),
-                            c.transform.trans(0.0, 0.0),
+                            rectangle::square(0.0, 0.0, size),
+                            c.transform.trans((col * size), (row * size) + 2.0),
                             gl,
                         );
                     }
@@ -104,7 +120,8 @@ pub fn start_gui(nes: Rc<RefCell<Nes>>) {
         gl: GlGraphics::new(opengl),
         nes,
         debug: AppDebugState {
-            nametable_tile_index: 103,
+            nametable_tile_index: 140,
+            print_debug_info: false
         },
     };
 
@@ -125,6 +142,9 @@ pub fn start_gui(nes: Rc<RefCell<Nes>>) {
                 }
                 Key::Left => {
                     app.debug.nametable_tile_index -= 1;
+                }
+                Key::Return => {
+                    app.debug.print_debug_info = true;
                 }
                 _ => {}
             }

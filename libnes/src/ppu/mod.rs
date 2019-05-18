@@ -70,15 +70,11 @@ impl Ppu for DefaultPpu {
                         Some(addr_hi) => {
                             self.vram_addr = u16_from_u8s(*val, addr_hi);
 
-                            println!("setting vram addr (lo: {:#02x}, hi: {:#02x}) to {:#02x}", *val, addr_hi, self.vram_addr);
-
                             self.pending_ppuaddr_hi = None;
                         }
                         None => self.pending_ppuaddr_hi = Some(*val),
                     },
                     PPUDATA => {
-                        println!("writing {:#02x} to {:#02x}", *val, &self.vram_addr);
-
                         // write to vram addr
                         self.mem.set(&self.vram_addr.into(), *val);
 
@@ -110,8 +106,6 @@ impl Ppu for DefaultPpu {
             &(nametable_addr + NAMETABLE_SIZE as u16).into(),
             ATTRIBUTE_TABLE_SIZE as u16,
         ));
-
-        println!("0x20eb: {:#02x}", self.read_bytes(&0x20ebu16.into(), 1)[0]);
 
         NameTable {
             index: table_index,

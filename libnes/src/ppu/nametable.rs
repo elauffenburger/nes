@@ -47,8 +47,10 @@ impl NameTable {
             .collect();
 
         Tile {
-            pattern_table_tile: pattern_table_tile,
-            colors: colors,
+            pattern_table_tile,
+            colors,
+            index,
+            pattern_table_tile_index
         }
     }
 }
