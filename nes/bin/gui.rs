@@ -56,37 +56,38 @@ impl App {
             for row in 0..NAMETABLE_DIMS[0] {
                 for col in 0..NAMETABLE_DIMS[1] {
                     let tile = nametable.get_tile_at_loc(row, col, &pattern_table);
+
                     // TODO: actually use palette for stuff
                     let colors = tile.pattern_table_tile.get_color_indices();
 
-                    // for right now, just draw one tile
-                    if index != nametable_draw_tile_index {
-                        index += 1;
-                        continue;
-                    }
-
                     if print_debug_info {
                         println!("tile index: {} ({:#02x})", tile.index, tile.index);
-                        println!("tile pattern table index: {} ({:#02x})", tile.pattern_table_tile_index, tile.pattern_table_tile_index);
+                        println!(
+                            "tile pattern table index: {} ({:#02x})",
+                            tile.pattern_table_tile_index, tile.pattern_table_tile_index
+                        );
                     }
+
+                    const tile_size: f64 = 16.0;
+                    let tile_x_offset = col as f64 * tile_size;
+                    let tile_y_offset = row as f64 * tile_size;
 
                     for (i, color) in colors.iter().enumerate() {
                         let row = (i / 8) as f64;
                         let col = (i % 8) as f64;
 
-                        let size = 20.0;
-
-                        if print_debug_info {
-                            println!("{} @ ({},{})", color, row * size, col * size);
-                        }
+                        let pixel_size = tile_size / 8.0;
 
                         rectangle(
                             match color {
                                 0 => BLACK,
                                 _ => GREEN,
                             },
-                            rectangle::square(0.0, 0.0, size),
-                            c.transform.trans((col * size), (row * size) + 2.0),
+                            rectangle::square(0.0, 0.0, pixel_size),
+                            c.transform.trans(
+                                tile_x_offset + (col * pixel_size),
+                                tile_y_offset + (row * pixel_size),
+                            ),
                             gl,
                         );
                     }
@@ -121,7 +122,7 @@ pub fn start_gui(nes: Rc<RefCell<Nes>>) {
         nes,
         debug: AppDebugState {
             nametable_tile_index: 140,
-            print_debug_info: false
+            print_debug_info: false,
         },
     };
 
